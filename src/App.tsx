@@ -6,7 +6,7 @@ import NotFound from "./pages/NotFound.tsx";
 
 export default function App() {
   return (
-    <DefaultProviders>
+    <DefaultProviders defaultTheme="dark">
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<Index />} />
