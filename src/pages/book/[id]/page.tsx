@@ -18,7 +18,7 @@ import { SignInButton } from "@/components/ui/signin.tsx";
 import { toast } from "sonner";
 import { ConvexError } from "convex/values";
 import { motion } from "motion/react";
-import { ArrowLeft, Car, MapPin, Calendar, Shield, Users, CheckCircle2 } from "lucide-react";
+import { ArrowLeft, Car, MapPin, Calendar, Shield, Users, CheckCircle2, Clock } from "lucide-react";
 import { format, differenceInDays, parseISO } from "date-fns";
 
 const CAR_IMAGES: Record<string, string> = {
@@ -31,6 +31,13 @@ const CAR_IMAGES: Record<string, string> = {
   van: "https://images.unsplash.com/photo-1701918190763-3851cf361f96?w=600&q=80",
 };
 
+const TIME_OPTIONS = [
+  "06:00", "06:30", "07:00", "07:30", "08:00", "08:30", "09:00", "09:30",
+  "10:00", "10:30", "11:00", "11:30", "12:00", "12:30", "13:00", "13:30",
+  "14:00", "14:30", "15:00", "15:30", "16:00", "16:30", "17:00", "17:30",
+  "18:00", "18:30", "19:00", "19:30", "20:00", "20:30", "21:00",
+];
+
 function BookingForm({ carId }: { carId: Id<"cars"> }) {
   const navigate = useNavigate();
   const car = useQuery(api.cars.get, { carId });
@@ -42,8 +49,11 @@ function BookingForm({ carId }: { carId: Id<"cars"> }) {
   const tomorrow = format(new Date(Date.now() + 86400000), "yyyy-MM-dd");
 
   const [pickupDate, setPickupDate] = useState(today);
+  const [pickupTime, setPickupTime] = useState("10:00");
   const [returnDate, setReturnDate] = useState(tomorrow);
-  const [locationId, setLocationId] = useState<string>("");
+  const [returnTime, setReturnTime] = useState("10:00");
+  const [pickupLocationId, setPickupLocationId] = useState<string>("");
+  const [dropoffLocationId, setDropoffLocationId] = useState<string>("");
   const [selectedServices, setSelectedServices] = useState<string[]>([]);
   const [notes, setNotes] = useState("");
   const [loading, setLoading] = useState(false);
@@ -63,7 +73,8 @@ function BookingForm({ carId }: { carId: Id<"cars"> }) {
   };
 
   const handleSubmit = async () => {
-    if (!locationId) { toast.error("Please select a pickup location"); return; }
+    if (!pickupLocationId) { toast.error("Please select a pickup location"); return; }
+    if (!dropoffLocationId) { toast.error("Please select a drop-off location"); return; }
     if (!pickupDate || !returnDate) { toast.error("Please select dates"); return; }
     if (new Date(returnDate) <= new Date(pickupDate)) { toast.error("Return date must be after pickup date"); return; }
 
@@ -71,9 +82,12 @@ function BookingForm({ carId }: { carId: Id<"cars"> }) {
     try {
       await createBooking({
         carId,
-        locationId: locationId as Id<"locations">,
+        pickupLocationId: pickupLocationId as Id<"locations">,
+        dropoffLocationId: dropoffLocationId as Id<"locations">,
         pickupDate: new Date(pickupDate).toISOString(),
+        pickupTime,
         returnDate: new Date(returnDate).toISOString(),
+        returnTime,
         additionalServiceIds: selectedServices as Id<"additionalServices">[],
         notes,
       });
@@ -120,6 +134,8 @@ function BookingForm({ carId }: { carId: Id<"cars"> }) {
     return <div className="text-center py-8"><p className="text-muted-foreground">Car not found.</p></div>;
   }
 
+  const carImage = (car.imageUrls && car.imageUrls[0]) ?? car.imageUrl ?? CAR_IMAGES[car.category] ?? CAR_IMAGES.sedan;
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
       {/* Form */}
@@ -128,7 +144,7 @@ function BookingForm({ carId }: { carId: Id<"cars"> }) {
         <Card className="border-border/50 bg-card/60">
           <CardContent className="p-4 flex gap-4">
             <img
-              src={car.imageUrl ?? CAR_IMAGES[car.category] ?? CAR_IMAGES.sedan}
+              src={carImage}
               alt={`${car.make} ${car.model}`}
               className="w-28 h-20 object-cover rounded-lg shrink-0"
             />
@@ -140,11 +156,11 @@ function BookingForm({ carId }: { carId: Id<"cars"> }) {
           </CardContent>
         </Card>
 
-        {/* Dates */}
+        {/* Dates & Times */}
         <Card className="border-border/50 bg-card/60">
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
-              <Calendar className="h-4 w-4 text-primary" /> Rental Dates
+              <Calendar className="h-4 w-4 text-primary" /> Rental Dates & Times
             </CardTitle>
           </CardHeader>
           <CardContent className="grid grid-cols-2 gap-4">
@@ -153,8 +169,38 @@ function BookingForm({ carId }: { carId: Id<"cars"> }) {
               <Input type="date" min={today} value={pickupDate} onChange={(e) => setPickupDate(e.target.value)} />
             </div>
             <div className="space-y-2">
-              <Label className="text-xs text-muted-foreground">Return Date</Label>
+              <Label className="text-xs text-muted-foreground flex items-center gap-1">
+                <Clock className="h-3 w-3" /> Pickup Time
+              </Label>
+              <Select value={pickupTime} onValueChange={setPickupTime}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select time" />
+                </SelectTrigger>
+                <SelectContent>
+                  {TIME_OPTIONS.map((t) => (
+                    <SelectItem key={t} value={t}>{t}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label className="text-xs text-muted-foreground">Drop-off Date</Label>
               <Input type="date" min={pickupDate} value={returnDate} onChange={(e) => setReturnDate(e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-xs text-muted-foreground flex items-center gap-1">
+                <Clock className="h-3 w-3" /> Drop-off Time
+              </Label>
+              <Select value={returnTime} onValueChange={setReturnTime}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select time" />
+                </SelectTrigger>
+                <SelectContent>
+                  {TIME_OPTIONS.map((t) => (
+                    <SelectItem key={t} value={t}>{t}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <p className="col-span-2 text-sm text-muted-foreground">
               Duration: <span className="text-foreground font-medium">{days} day{days !== 1 ? "s" : ""}</span>
@@ -162,31 +208,49 @@ function BookingForm({ carId }: { carId: Id<"cars"> }) {
           </CardContent>
         </Card>
 
-        {/* Location */}
+        {/* Locations */}
         <Card className="border-border/50 bg-card/60">
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
-              <MapPin className="h-4 w-4 text-primary" /> Pickup Location
+              <MapPin className="h-4 w-4 text-primary" /> Pickup & Drop-off Locations
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            <Select value={locationId} onValueChange={setLocationId}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select pickup location" />
-              </SelectTrigger>
-              <SelectContent>
-                {locations.map((loc) => (
-                  <SelectItem key={loc._id} value={loc._id}>
-                    {loc.name} — {loc.city}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label className="text-xs text-muted-foreground">Pickup Location</Label>
+              <Select value={pickupLocationId} onValueChange={setPickupLocationId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select pickup location" />
+                </SelectTrigger>
+                <SelectContent>
+                  {(locations ?? []).map((loc) => (
+                    <SelectItem key={loc._id} value={loc._id}>
+                      {loc.name} — {loc.city}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label className="text-xs text-muted-foreground">Drop-off Location</Label>
+              <Select value={dropoffLocationId} onValueChange={setDropoffLocationId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select drop-off location" />
+                </SelectTrigger>
+                <SelectContent>
+                  {(locations ?? []).map((loc) => (
+                    <SelectItem key={loc._id} value={loc._id}>
+                      {loc.name} — {loc.city}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </CardContent>
         </Card>
 
         {/* Additional Services */}
-        {services.length > 0 && (
+        {(services ?? []).length > 0 && (
           <Card className="border-border/50 bg-card/60">
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
@@ -194,7 +258,7 @@ function BookingForm({ carId }: { carId: Id<"cars"> }) {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              {services.map((svc) => (
+              {(services ?? []).map((svc) => (
                 <div
                   key={svc._id}
                   className={`flex items-start gap-3 p-3 rounded-lg border transition-colors cursor-pointer ${
@@ -250,6 +314,18 @@ function BookingForm({ carId }: { carId: Id<"cars"> }) {
               <CardTitle className="text-base">Booking Summary</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
+              {/* Date/time summary */}
+              <div className="bg-secondary/30 rounded-lg p-3 space-y-1.5 text-xs">
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <Calendar className="h-3 w-3 shrink-0" />
+                  <span>Pickup: <span className="text-foreground font-medium">{pickupDate} at {pickupTime}</span></span>
+                </div>
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <Calendar className="h-3 w-3 shrink-0" />
+                  <span>Drop-off: <span className="text-foreground font-medium">{returnDate} at {returnTime}</span></span>
+                </div>
+              </div>
+
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">${car.dailyRate} × {days} day{days !== 1 ? "s" : ""}</span>
                 <span>${carTotal}</span>
@@ -259,7 +335,7 @@ function BookingForm({ carId }: { carId: Id<"cars"> }) {
                 .map((svc) => (
                   <div key={svc._id} className="flex justify-between text-sm">
                     <span className="text-muted-foreground">{svc.name}</span>
-                    <span>+${svc.dailyRate * days}</span>
+                    <span className="text-primary">+${svc.dailyRate * days}</span>
                   </div>
                 ))}
               <div className="border-t border-border/50 pt-3 flex justify-between font-semibold">

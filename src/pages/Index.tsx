@@ -5,9 +5,14 @@ import { Badge } from "@/components/ui/badge.tsx";
 import { Card, CardContent } from "@/components/ui/card.tsx";
 import Navbar from "@/components/navbar.tsx";
 import Footer from "@/components/footer.tsx";
-import { ArrowRight, Star, Shield, Clock, MapPin, Zap, Car, Users, Award } from "lucide-react";
+import { ArrowRight, Star, Shield, Clock, MapPin, Zap, Car, Users, Award, Calendar } from "lucide-react";
 import { useState } from "react";
+import { useQuery } from "convex/react";
+import { api } from "@/convex/_generated/api.js";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select.tsx";
+import { Input } from "@/components/ui/input.tsx";
+import { Label } from "@/components/ui/label.tsx";
+import { format } from "date-fns";
 
 const HERO_IMAGE = "https://images.unsplash.com/photo-1679891647402-330589ea9309?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=1920&q=80";
 
@@ -66,15 +71,33 @@ const WHY_US = [
   },
 ];
 
+const TIME_OPTIONS = [
+  "06:00", "07:00", "08:00", "09:00", "10:00", "11:00", "12:00",
+  "13:00", "14:00", "15:00", "16:00", "17:00", "18:00", "19:00", "20:00", "21:00",
+];
+
 export default function Index() {
   const navigate = useNavigate();
+  const locations = useQuery(api.locations.list, { activeOnly: true });
+
+  const today = format(new Date(), "yyyy-MM-dd");
+  const tomorrow = format(new Date(Date.now() + 86400000), "yyyy-MM-dd");
+
   const [pickupLocation, setPickupLocation] = useState("");
-  const [category, setCategory] = useState("");
+  const [dropoffLocation, setDropoffLocation] = useState("");
+  const [pickupDate, setPickupDate] = useState(today);
+  const [pickupTime, setPickupTime] = useState("10:00");
+  const [dropoffDate, setDropoffDate] = useState(tomorrow);
+  const [dropoffTime, setDropoffTime] = useState("10:00");
 
   const handleSearch = () => {
     const params = new URLSearchParams();
-    if (pickupLocation) params.set("location", pickupLocation);
-    if (category) params.set("category", category);
+    if (pickupLocation) params.set("pickupLocation", pickupLocation);
+    if (dropoffLocation) params.set("dropoffLocation", dropoffLocation);
+    if (pickupDate) params.set("pickupDate", pickupDate);
+    if (pickupTime) params.set("pickupTime", pickupTime);
+    if (dropoffDate) params.set("dropoffDate", dropoffDate);
+    if (dropoffTime) params.set("dropoffTime", dropoffTime);
     navigate(`/cars?${params.toString()}`);
   };
 
@@ -95,12 +118,12 @@ export default function Index() {
         {/* Glowing orb effect */}
         <div className="absolute top-1/3 right-1/4 w-96 h-96 rounded-full bg-primary/10 blur-3xl pointer-events-none" />
 
-        <div className="relative z-10 mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-20">
+        <div className="relative z-10 mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-20 w-full">
           <motion.div
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.7, ease: "easeOut" }}
-            className="max-w-2xl"
+            className="max-w-3xl"
           >
             <motion.div
               initial={{ opacity: 0, x: -20 }}
@@ -138,38 +161,104 @@ export default function Index() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.6, duration: 0.5 }}
-              className="bg-card/80 backdrop-blur-xl border border-border rounded-2xl p-4 flex flex-col sm:flex-row gap-3"
+              className="bg-card/90 backdrop-blur-xl border border-border rounded-2xl p-5 space-y-4"
             >
-              <Select value={pickupLocation} onValueChange={setPickupLocation}>
-                <SelectTrigger className="flex-1 bg-secondary/50 border-0 h-11">
-                  <MapPin className="h-4 w-4 mr-1 text-primary shrink-0" />
-                  <SelectValue placeholder="Pickup Location" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="yyc-airport">YYC Airport</SelectItem>
-                  <SelectItem value="downtown">Downtown Calgary</SelectItem>
-                  <SelectItem value="nw-calgary">NW Calgary</SelectItem>
-                  <SelectItem value="se-calgary">SE Calgary</SelectItem>
-                </SelectContent>
-              </Select>
+              {/* Row 1: Pickup & Drop-off Locations */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground flex items-center gap-1">
+                    <MapPin className="h-3 w-3 text-primary" /> Pickup Location
+                  </Label>
+                  <Select value={pickupLocation} onValueChange={setPickupLocation}>
+                    <SelectTrigger className="bg-secondary/50 border-0 h-10">
+                      <SelectValue placeholder="Select pickup location" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(locations ?? []).map((loc) => (
+                        <SelectItem key={loc._id} value={loc._id}>
+                          {loc.name} — {loc.city}
+                        </SelectItem>
+                      ))}
+                      {(locations ?? []).length === 0 && (
+                        <SelectItem value="none" disabled>No locations yet</SelectItem>
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground flex items-center gap-1">
+                    <MapPin className="h-3 w-3 text-primary" /> Drop-off Location
+                  </Label>
+                  <Select value={dropoffLocation} onValueChange={setDropoffLocation}>
+                    <SelectTrigger className="bg-secondary/50 border-0 h-10">
+                      <SelectValue placeholder="Select drop-off location" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(locations ?? []).map((loc) => (
+                        <SelectItem key={loc._id} value={loc._id}>
+                          {loc.name} — {loc.city}
+                        </SelectItem>
+                      ))}
+                      {(locations ?? []).length === 0 && (
+                        <SelectItem value="none" disabled>No locations yet</SelectItem>
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
 
-              <Select value={category} onValueChange={setCategory}>
-                <SelectTrigger className="flex-1 bg-secondary/50 border-0 h-11">
-                  <Car className="h-4 w-4 mr-1 text-primary shrink-0" />
-                  <SelectValue placeholder="Car Type" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="economy">Economy</SelectItem>
-                  <SelectItem value="sedan">Sedan</SelectItem>
-                  <SelectItem value="suv">SUV</SelectItem>
-                  <SelectItem value="luxury">Luxury</SelectItem>
-                  <SelectItem value="sports">Sports</SelectItem>
-                  <SelectItem value="van">Van</SelectItem>
-                </SelectContent>
-              </Select>
+              {/* Row 2: Dates & Times */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground flex items-center gap-1">
+                    <Calendar className="h-3 w-3 text-primary" /> Pickup Date
+                  </Label>
+                  <Input
+                    type="date"
+                    min={today}
+                    value={pickupDate}
+                    onChange={(e) => setPickupDate(e.target.value)}
+                    className="bg-secondary/50 border-0 h-10 text-sm"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">Pickup Time</Label>
+                  <Select value={pickupTime} onValueChange={setPickupTime}>
+                    <SelectTrigger className="bg-secondary/50 border-0 h-10">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {TIME_OPTIONS.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground flex items-center gap-1">
+                    <Calendar className="h-3 w-3 text-primary" /> Drop-off Date
+                  </Label>
+                  <Input
+                    type="date"
+                    min={pickupDate}
+                    value={dropoffDate}
+                    onChange={(e) => setDropoffDate(e.target.value)}
+                    className="bg-secondary/50 border-0 h-10 text-sm"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">Drop-off Time</Label>
+                  <Select value={dropoffTime} onValueChange={setDropoffTime}>
+                    <SelectTrigger className="bg-secondary/50 border-0 h-10">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {TIME_OPTIONS.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
 
-              <Button onClick={handleSearch} className="h-11 px-6 font-semibold shrink-0 cursor-pointer">
-                Search Cars <ArrowRight className="ml-2 h-4 w-4" />
+              <Button onClick={handleSearch} className="w-full h-11 font-semibold cursor-pointer">
+                Search Available Cars <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
             </motion.div>
 

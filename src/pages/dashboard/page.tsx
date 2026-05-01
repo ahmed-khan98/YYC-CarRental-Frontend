@@ -26,9 +26,10 @@ const STATUS_COLORS: Record<string, string> = {
   cancelled: "bg-red-500/20 text-red-400 border-red-500/30",
 };
 
-function BookingCard({ booking }: { booking: { _id: Id<"bookings">; carId: Id<"cars">; locationId: Id<"locations">; pickupDate: string; returnDate: string; status: string; totalAmount: number; _creationTime: number } }) {
+function BookingCard({ booking }: { booking: { _id: Id<"bookings">; carId: Id<"cars">; pickupLocationId: Id<"locations">; dropoffLocationId: Id<"locations">; pickupDate: string; pickupTime?: string; returnDate: string; returnTime?: string; status: string; totalAmount: number; _creationTime: number } }) {
   const car = useQuery(api.cars.get, { carId: booking.carId });
-  const location = useQuery(api.locations.get, { locationId: booking.locationId });
+  const pickupLocation = useQuery(api.locations.get, { locationId: booking.pickupLocationId });
+  const dropoffLocation = useQuery(api.locations.get, { locationId: booking.dropoffLocationId });
   const cancel = useMutation(api.bookings.cancel);
 
   const handleCancel = async () => {
@@ -75,12 +76,13 @@ function BookingCard({ booking }: { booking: { _id: Id<"bookings">; carId: Id<"c
                   <div className="flex flex-wrap gap-3 text-xs text-muted-foreground mt-1">
                     <span className="flex items-center gap-1">
                       <Calendar className="h-3 w-3" />
-                      {format(new Date(booking.pickupDate), "MMM d")} — {format(new Date(booking.returnDate), "MMM d, yyyy")}
+                      {format(new Date(booking.pickupDate), "MMM d")}{booking.pickupTime ? ` ${booking.pickupTime}` : ""} — {format(new Date(booking.returnDate), "MMM d, yyyy")}{booking.returnTime ? ` ${booking.returnTime}` : ""}
                     </span>
-                    {location && (
+                    {pickupLocation && (
                       <span className="flex items-center gap-1">
                         <MapPin className="h-3 w-3" />
-                        {location.name}
+                        {pickupLocation.name}
+                        {dropoffLocation && dropoffLocation._id !== pickupLocation._id && ` → ${dropoffLocation.name}`}
                       </span>
                     )}
                     <span className="flex items-center gap-1">

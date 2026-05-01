@@ -5,9 +5,12 @@ import { ConvexError } from "convex/values";
 export const create = mutation({
   args: {
     carId: v.id("cars"),
-    locationId: v.id("locations"),
+    pickupLocationId: v.id("locations"),
+    dropoffLocationId: v.id("locations"),
     pickupDate: v.string(),
+    pickupTime: v.optional(v.string()),
     returnDate: v.string(),
+    returnTime: v.optional(v.string()),
     additionalServiceIds: v.optional(v.array(v.id("additionalServices"))),
     licenseUrl: v.optional(v.string()),
     notes: v.optional(v.string()),
@@ -42,13 +45,72 @@ export const create = mutation({
     return await ctx.db.insert("bookings", {
       userId: user._id,
       carId: args.carId,
-      locationId: args.locationId,
+      pickupLocationId: args.pickupLocationId,
+      dropoffLocationId: args.dropoffLocationId,
       pickupDate: args.pickupDate,
+      pickupTime: args.pickupTime,
       returnDate: args.returnDate,
+      returnTime: args.returnTime,
       status: "pending",
       totalAmount: total,
       additionalServiceIds: args.additionalServiceIds,
       licenseUrl: args.licenseUrl,
+      notes: args.notes,
+      paymentStatus: "pending",
+    });
+  },
+});
+
+// Admin creates a booking on behalf of a user
+export const adminCreate = mutation({
+  args: {
+    userId: v.id("users"),
+    carId: v.id("cars"),
+    pickupLocationId: v.id("locations"),
+    dropoffLocationId: v.id("locations"),
+    pickupDate: v.string(),
+    pickupTime: v.optional(v.string()),
+    returnDate: v.string(),
+    returnTime: v.optional(v.string()),
+    additionalServiceIds: v.optional(v.array(v.id("additionalServices"))),
+    notes: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new ConvexError({ message: "Not authenticated", code: "UNAUTHENTICATED" });
+    const caller = await ctx.db
+      .query("users")
+      .withIndex("by_token", (q) => q.eq("tokenIdentifier", identity.tokenIdentifier))
+      .unique();
+    if (!caller || caller.role !== "admin") throw new ConvexError({ message: "Forbidden", code: "FORBIDDEN" });
+
+    const car = await ctx.db.get(args.carId);
+    if (!car) throw new ConvexError({ message: "Car not found", code: "NOT_FOUND" });
+
+    const pickup = new Date(args.pickupDate);
+    const returnD = new Date(args.returnDate);
+    const days = Math.max(1, Math.ceil((returnD.getTime() - pickup.getTime()) / (1000 * 60 * 60 * 24)));
+    let total = car.dailyRate * days;
+
+    if (args.additionalServiceIds) {
+      for (const svcId of args.additionalServiceIds) {
+        const svc = await ctx.db.get(svcId);
+        if (svc) total += svc.dailyRate * days;
+      }
+    }
+
+    return await ctx.db.insert("bookings", {
+      userId: args.userId,
+      carId: args.carId,
+      pickupLocationId: args.pickupLocationId,
+      dropoffLocationId: args.dropoffLocationId,
+      pickupDate: args.pickupDate,
+      pickupTime: args.pickupTime,
+      returnDate: args.returnDate,
+      returnTime: args.returnTime,
+      status: "confirmed",
+      totalAmount: total,
+      additionalServiceIds: args.additionalServiceIds,
       notes: args.notes,
       paymentStatus: "pending",
     });
@@ -82,6 +144,13 @@ export const adminList = query({
     const all = await ctx.db.query("bookings").collect();
     if (args.status) return all.filter((b) => b.status === args.status);
     return all;
+  },
+});
+
+export const getById = query({
+  args: { bookingId: v.id("bookings") },
+  handler: async (ctx, args) => {
+    return await ctx.db.get(args.bookingId);
   },
 });
 

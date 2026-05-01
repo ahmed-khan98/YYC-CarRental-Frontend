@@ -29,6 +29,7 @@ export default defineSchema({
     licensePlate: v.string(),
     dailyRate: v.number(),
     imageUrl: v.optional(v.string()),
+    imageUrls: v.optional(v.array(v.string())),
     seats: v.number(),
     transmission: v.union(v.literal("automatic"), v.literal("manual")),
     fuelType: v.union(v.literal("gasoline"), v.literal("diesel"), v.literal("electric"), v.literal("hybrid")),
@@ -66,9 +67,12 @@ export default defineSchema({
   bookings: defineTable({
     userId: v.id("users"),
     carId: v.id("cars"),
-    locationId: v.id("locations"),
+    pickupLocationId: v.id("locations"),
+    dropoffLocationId: v.id("locations"),
     pickupDate: v.string(),
+    pickupTime: v.optional(v.string()),
     returnDate: v.string(),
+    returnTime: v.optional(v.string()),
     status: v.union(
       v.literal("pending"),
       v.literal("confirmed"),
