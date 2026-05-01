@@ -10,7 +10,9 @@
 
 import type * as bookings from "../bookings.js";
 import type * as cars from "../cars.js";
+import type * as inspections from "../inspections.js";
 import type * as locations from "../locations.js";
+import type * as maintenance from "../maintenance.js";
 import type * as services from "../services.js";
 import type * as users from "../users.js";
 
@@ -23,7 +25,9 @@ import type {
 declare const fullApi: ApiFromModules<{
   bookings: typeof bookings;
   cars: typeof cars;
+  inspections: typeof inspections;
   locations: typeof locations;
+  maintenance: typeof maintenance;
   services: typeof services;
   users: typeof users;
 }>;

@@ -3,6 +3,19 @@ import { DefaultProviders } from "./components/providers/default.tsx";
 import AuthCallback from "./pages/auth/Callback.tsx";
 import Index from "./pages/Index.tsx";
 import NotFound from "./pages/NotFound.tsx";
+import CarsPage from "./pages/cars/page.tsx";
+import CarDetailPage from "./pages/cars/[id]/page.tsx";
+import BookPage from "./pages/book/[id]/page.tsx";
+import DashboardPage from "./pages/dashboard/page.tsx";
+import AdminLayout from "./pages/admin/layout.tsx";
+import AdminOverview from "./pages/admin/page.tsx";
+import AdminCarsPage from "./pages/admin/cars/page.tsx";
+import AdminBookingsPage from "./pages/admin/bookings/page.tsx";
+import AdminCheckInOutPage from "./pages/admin/checkinout/page.tsx";
+import AdminCustomersPage from "./pages/admin/customers/page.tsx";
+import AdminLocationsPage from "./pages/admin/locations/page.tsx";
+import AdminServicesPage from "./pages/admin/services/page.tsx";
+import AdminMaintenancePage from "./pages/admin/maintenance/page.tsx";
 
 export default function App() {
   return (
@@ -10,8 +23,24 @@ export default function App() {
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<Index />} />
+          <Route path="/cars" element={<CarsPage />} />
+          <Route path="/cars/:id" element={<CarDetailPage />} />
+          <Route path="/book/:id" element={<BookPage />} />
+          <Route path="/dashboard" element={<DashboardPage />} />
+
+          {/* Admin routes with sidebar layout */}
+          <Route path="/admin" element={<AdminLayout />}>
+            <Route index element={<AdminOverview />} />
+            <Route path="cars" element={<AdminCarsPage />} />
+            <Route path="bookings" element={<AdminBookingsPage />} />
+            <Route path="checkinout" element={<AdminCheckInOutPage />} />
+            <Route path="customers" element={<AdminCustomersPage />} />
+            <Route path="locations" element={<AdminLocationsPage />} />
+            <Route path="services" element={<AdminServicesPage />} />
+            <Route path="maintenance" element={<AdminMaintenancePage />} />
+          </Route>
+
           <Route path="/auth/callback" element={<AuthCallback />} />
-          {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
