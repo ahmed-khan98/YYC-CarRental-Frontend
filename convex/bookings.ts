@@ -183,6 +183,69 @@ export const getById = query({
   },
 });
 
+export const getDetailById = query({
+  args: { bookingId: v.id("bookings") },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return null;
+
+    const booking = await ctx.db.get(args.bookingId);
+    if (!booking) return null;
+
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_token", (q) => q.eq("tokenIdentifier", identity.tokenIdentifier))
+      .unique();
+    if (!user) return null;
+
+    // Only owner or admin can view
+    const isAdmin = user.role === "admin";
+    if (!isAdmin && booking.userId !== user._id) return null;
+
+    const car = await ctx.db.get(booking.carId);
+    const pickupLocation = await ctx.db.get(booking.pickupLocationId);
+    const dropoffLocation = await ctx.db.get(booking.dropoffLocationId);
+
+    // Resolve car images
+    let carImageUrls: string[] = [];
+    if (car?.imageStorageIds && car.imageStorageIds.length > 0) {
+      carImageUrls = (
+        await Promise.all(car.imageStorageIds.map((id) => ctx.storage.getUrl(id)))
+      ).filter((u): u is string => u !== null);
+    } else if (car?.imageUrl) {
+      carImageUrls = [car.imageUrl];
+    }
+
+    // Resolve additional services
+    const services: Array<{ _id: string; name: string; dailyRate: number; category: string }> = [];
+    if (booking.additionalServiceIds) {
+      for (const svcId of booking.additionalServiceIds) {
+        const svc = await ctx.db.get(svcId);
+        if (svc) services.push({ _id: svc._id, name: svc.name, dailyRate: svc.dailyRate, category: svc.category });
+      }
+    }
+
+    // Calculate duration in days
+    const pickup = new Date(booking.pickupDate);
+    const returnD = new Date(booking.returnDate);
+    const days = Math.max(1, Math.ceil((returnD.getTime() - pickup.getTime()) / (1000 * 60 * 60 * 24)));
+
+    const baseAmount = car ? car.dailyRate * days : 0;
+    const servicesAmount = services.reduce((sum, s) => sum + s.dailyRate * days, 0);
+
+    return {
+      booking,
+      car: car ? { ...car, resolvedImageUrls: carImageUrls } : null,
+      pickupLocation,
+      dropoffLocation,
+      services,
+      days,
+      baseAmount,
+      servicesAmount,
+    };
+  },
+});
+
 // Query available cars for date range
 export const getUnavailableCarIds = query({
   args: { pickupDate: v.string(), returnDate: v.string() },

@@ -268,6 +268,7 @@ function BookingCard({ booking }: { booking: BookingType }) {
   const pickupLocation = useQuery(api.locations.get, { locationId: booking.pickupLocationId });
   const dropoffLocation = useQuery(api.locations.get, { locationId: booking.dropoffLocationId });
   const cancel = useMutation(api.bookings.cancel);
+  const navigate = useNavigate();
 
   const [checkInOpen, setCheckInOpen] = useState(false);
   const [checkOutOpen, setCheckOutOpen] = useState(false);
@@ -359,6 +360,14 @@ function BookingCard({ booking }: { booking: BookingType }) {
 
                 {/* Action buttons */}
                 <div className="mt-2 flex gap-2 flex-wrap items-center">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 text-xs cursor-pointer text-primary hover:text-primary hover:bg-primary/10"
+                    onClick={() => navigate(`/bookings/${booking._id}`)}
+                  >
+                    View Details
+                  </Button>
                   {(booking.status === "pending" || booking.status === "confirmed") && (
                     <Button
                       variant="ghost"

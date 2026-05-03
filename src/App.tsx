@@ -21,6 +21,7 @@ import AdminCustomersPage from "./pages/admin/customers/page.tsx";
 import AdminLocationsPage from "./pages/admin/locations/page.tsx";
 import AdminServicesPage from "./pages/admin/services/page.tsx";
 import AdminMaintenancePage from "./pages/admin/maintenance/page.tsx";
+import BookingDetailPage from "./pages/bookings/[id]/page.tsx";
 
 export default function App() {
   return (
@@ -32,6 +33,7 @@ export default function App() {
           <Route path="/cars/:id" element={<CarDetailPage />} />
           <Route path="/book/:id" element={<BookPage />} />
           <Route path="/dashboard" element={<DashboardPage />} />
+          <Route path="/bookings/:id" element={<BookingDetailPage />} />
           <Route path="/profile" element={<ProfilePage />} />
           <Route path="/about" element={<AboutPage />} />
           <Route path="/privacy" element={<PrivacyPage />} />
