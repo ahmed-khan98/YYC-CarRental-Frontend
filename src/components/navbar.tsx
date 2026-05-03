@@ -31,7 +31,7 @@ export default function Navbar() {
         <div className="flex h-16 items-center justify-between">
           {/* Logo */}
           <Link to="/" className="flex items-center gap-2 cursor-pointer">
-            <img src="https://hercules-cdn.com/file_TzkbkvKgaG8c5mb8GR10u73n" alt="YYCDrive" className="h-8 w-auto rounded" />
+            <img src="https://hercules-cdn.com/file_dVxwiXfL1wdm51ni7anwnzQ9" alt="YYCDrive" className="h-8 w-auto rounded" />
             <span className="text-lg font-bold tracking-tight hidden sm:block">
               YYC<span className="text-primary">Drive</span>
             </span>
