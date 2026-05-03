@@ -21,6 +21,7 @@ import AdminCustomersPage from "./pages/admin/customers/page.tsx";
 import AdminLocationsPage from "./pages/admin/locations/page.tsx";
 import AdminServicesPage from "./pages/admin/services/page.tsx";
 import AdminMaintenancePage from "./pages/admin/maintenance/page.tsx";
+import AdminBookingDetailPage from "./pages/admin/bookings/[id]/page.tsx";
 import BookingDetailPage from "./pages/bookings/[id]/page.tsx";
 
 export default function App() {
@@ -45,6 +46,7 @@ export default function App() {
             <Route index element={<AdminOverview />} />
             <Route path="cars" element={<AdminCarsPage />} />
             <Route path="bookings" element={<AdminBookingsPage />} />
+            <Route path="bookings/:id" element={<AdminBookingDetailPage />} />
             <Route path="checkinout" element={<AdminCheckInOutPage />} />
             <Route path="customers" element={<AdminCustomersPage />} />
             <Route path="locations" element={<AdminLocationsPage />} />

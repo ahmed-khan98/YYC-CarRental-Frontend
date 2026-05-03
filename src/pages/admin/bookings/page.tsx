@@ -1,5 +1,6 @@
 import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "convex/react";
+import { useNavigate } from "react-router-dom";
 import { api } from "@/convex/_generated/api.js";
 import type { Id } from "@/convex/_generated/dataModel.d.ts";
 import { Button } from "@/components/ui/button.tsx";
@@ -13,7 +14,7 @@ import { Checkbox } from "@/components/ui/checkbox.tsx";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog.tsx";
 import { toast } from "sonner";
 import { format } from "date-fns";
-import { CalendarCheck, Plus, MapPin, Clock, Car, User, SlidersHorizontal, X, LogIn, LogOut, Gauge, Fuel, FileText, Camera, ChevronDown, ChevronUp } from "lucide-react";
+import { CalendarCheck, Plus, MapPin, Clock, Car, User, SlidersHorizontal, X, LogIn, LogOut, Gauge, Fuel, FileText, Camera, ChevronDown, ChevronUp, ExternalLink } from "lucide-react";
 
 // Admin can change status but NOT to checked_in/checked_out — those are user-only actions
 const ADMIN_STATUS_OPTIONS = ["pending", "confirmed", "completed", "cancelled"] as const;
@@ -108,6 +109,7 @@ export default function AdminBookingsPage() {
   const updateStatus = useMutation(api.bookings.updateStatus);
   const adminCreate = useMutation(api.bookings.adminCreate);
   const cancelBooking = useMutation(api.bookings.cancel);
+  const navigate = useNavigate();
 
   const users = useQuery(api.users.listUsers, {});
   const cars = useQuery(api.cars.list, {});
@@ -374,6 +376,14 @@ export default function AdminBookingsPage() {
                           )}
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 text-xs cursor-pointer text-primary hover:text-primary hover:bg-primary/10"
+                            onClick={() => navigate(`/admin/bookings/${booking._id}`)}
+                          >
+                            <ExternalLink className="h-3 w-3 mr-1" /> View
+                          </Button>
                           <Select
                             value={booking.status}
                             onValueChange={(v) => handleStatusChange(booking._id, v as typeof STATUS_OPTIONS[number])}
