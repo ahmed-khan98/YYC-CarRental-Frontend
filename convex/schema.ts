@@ -90,6 +90,7 @@ export default defineSchema({
     notes: v.optional(v.string()),
     paymentStatus: v.optional(v.union(v.literal("pending"), v.literal("paid"), v.literal("refunded"))),
     cancellationReason: v.optional(v.string()),
+    cancelledBy: v.optional(v.union(v.literal("user"), v.literal("admin"))),
   })
     .index("by_user", ["userId"])
     .index("by_car", ["carId"])

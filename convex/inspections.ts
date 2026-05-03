@@ -55,10 +55,24 @@ export const create = mutation({
 export const listByBooking = query({
   args: { bookingId: v.id("bookings") },
   handler: async (ctx, args) => {
-    return await ctx.db
+    const inspections = await ctx.db
       .query("vehicleInspections")
       .withIndex("by_booking", (q) => q.eq("bookingId", args.bookingId))
       .collect();
+    // Resolve image URLs for each inspection
+    return await Promise.all(
+      inspections.map(async (insp) => {
+        let resolvedImageUrls: string[] = [];
+        if (insp.imageStorageIds && insp.imageStorageIds.length > 0) {
+          resolvedImageUrls = (
+            await Promise.all(insp.imageStorageIds.map((id) => ctx.storage.getUrl(id)))
+          ).filter((u): u is string => u !== null);
+        } else if (insp.imageUrls) {
+          resolvedImageUrls = insp.imageUrls;
+        }
+        return { ...insp, resolvedImageUrls };
+      })
+    );
   },
 });
 

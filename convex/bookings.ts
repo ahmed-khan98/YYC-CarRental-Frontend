@@ -214,6 +214,10 @@ export const updateStatus = mutation({
       patch.cancellationReason = args.cancellationReason;
     }
     await ctx.db.patch(args.bookingId, patch);
+    // Auto-complete booking when user checks out
+    if (args.status === "checked_out") {
+      await ctx.db.patch(args.bookingId, { status: "completed" });
+    }
   },
 });
 
@@ -262,9 +266,11 @@ export const cancel = mutation({
       throw new ConvexError({ message: "Admin must provide a cancellation reason", code: "BAD_REQUEST" });
     }
 
+    // Store who cancelled: if admin, store reason; if user, no reason stored
     await ctx.db.patch(args.bookingId, {
       status: "cancelled",
-      cancellationReason: args.reason,
+      cancellationReason: isAdmin ? args.reason : undefined,
+      cancelledBy: isAdmin ? "admin" : "user",
     });
   },
 });

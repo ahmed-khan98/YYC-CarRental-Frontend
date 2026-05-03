@@ -13,8 +13,10 @@ import { Checkbox } from "@/components/ui/checkbox.tsx";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog.tsx";
 import { toast } from "sonner";
 import { format } from "date-fns";
-import { CalendarCheck, Plus, MapPin, Clock, Car, User, SlidersHorizontal, X } from "lucide-react";
+import { CalendarCheck, Plus, MapPin, Clock, Car, User, SlidersHorizontal, X, LogIn, LogOut, Gauge, Fuel, FileText, Camera, ChevronDown, ChevronUp } from "lucide-react";
 
+// Admin can change status but NOT to checked_in/checked_out — those are user-only actions
+const ADMIN_STATUS_OPTIONS = ["pending", "confirmed", "completed", "cancelled"] as const;
 const STATUS_OPTIONS = ["pending", "confirmed", "checked_in", "checked_out", "completed", "cancelled"] as const;
 const STATUS_COLORS: Record<string, string> = {
   pending: "bg-yellow-500/20 text-yellow-400 border-yellow-500/30",
@@ -43,6 +45,64 @@ const CAR_IMAGES: Record<string, string> = {
   van: "https://images.unsplash.com/photo-1701918190763-3851cf361f96?w=200&q=70",
 };
 
+function AdminInspectionPanel({ bookingId }: { bookingId: Id<"bookings"> }) {
+  const inspections = useQuery(api.inspections.listByBooking, { bookingId });
+  if (!inspections) return <div className="mt-2 text-xs text-muted-foreground">Loading inspections...</div>;
+  if (inspections.length === 0) return <div className="mt-2 text-xs text-muted-foreground">No inspection records yet.</div>;
+
+  return (
+    <div className="mt-3 space-y-2 border-t border-border/40 pt-3">
+      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Inspection Records</p>
+      {inspections.map((insp) => (
+        <div key={insp._id} className="bg-muted/20 rounded-lg p-3 border border-border/30 space-y-2">
+          <div className="flex items-center gap-2">
+            {insp.type === "check_in" ? (
+              <LogIn className="h-3.5 w-3.5 text-primary shrink-0" />
+            ) : (
+              <LogOut className="h-3.5 w-3.5 text-blue-400 shrink-0" />
+            )}
+            <span className="text-xs font-semibold">{insp.type === "check_in" ? "Check-In" : "Check-Out"}</span>
+            <span className="text-xs text-muted-foreground ml-auto">
+              {format(new Date(insp._creationTime), "MMM d, yyyy h:mm a")}
+            </span>
+          </div>
+          <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-muted-foreground">
+            <div className="flex items-center gap-1">
+              <Gauge className="h-3 w-3 shrink-0" />
+              <span>Mileage: <span className="text-foreground">{insp.mileage.toLocaleString()} km</span></span>
+            </div>
+            <div className="flex items-center gap-1">
+              <Fuel className="h-3 w-3 shrink-0" />
+              <span>Fuel: <span className="text-foreground capitalize">{insp.fuelLevel.replace("_", " ")}</span></span>
+            </div>
+            {insp.notes && (
+              <div className="col-span-2 flex items-start gap-1">
+                <FileText className="h-3 w-3 shrink-0 mt-0.5" />
+                <span>Notes: <span className="text-foreground">{insp.notes}</span></span>
+              </div>
+            )}
+          </div>
+          {insp.resolvedImageUrls && insp.resolvedImageUrls.length > 0 && (
+            <div className="space-y-1">
+              <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                <Camera className="h-3 w-3" />
+                <span>Photos ({insp.resolvedImageUrls.length})</span>
+              </div>
+              <div className="flex gap-2 flex-wrap">
+                {insp.resolvedImageUrls.map((url, i) => (
+                  <a key={i} href={url} target="_blank" rel="noopener noreferrer">
+                    <img src={url} alt={`Inspection ${i + 1}`} className="h-14 w-20 object-cover rounded cursor-pointer hover:opacity-80 transition-opacity" />
+                  </a>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function AdminBookingsPage() {
   const bookings = useQuery(api.bookings.adminList, {});
   const updateStatus = useMutation(api.bookings.updateStatus);
@@ -65,6 +125,7 @@ export default function AdminBookingsPage() {
   const [cancelBookingId, setCancelBookingId] = useState<Id<"bookings"> | null>(null);
   const [cancelReason, setCancelReason] = useState("");
   const [cancelLoading, setCancelLoading] = useState(false);
+  const [expandedInspection, setExpandedInspection] = useState<string | null>(null);
 
   // New booking form state
   const [nbUserId, setNbUserId] = useState("");
@@ -321,9 +382,16 @@ export default function AdminBookingsPage() {
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                              {STATUS_OPTIONS.map((s) => (
+                              {/* Admin can't set check_in/check_out — those are user-driven actions */}
+                              {ADMIN_STATUS_OPTIONS.map((s) => (
                                 <SelectItem key={s} value={s} className="text-xs capitalize">{s.replace("_", " ")}</SelectItem>
                               ))}
+                              {/* Show read-only status if currently checked_in/checked_out */}
+                              {(booking.status === "checked_in" || booking.status === "checked_out") && (
+                                <SelectItem value={booking.status} className="text-xs capitalize opacity-60" disabled>
+                                  {booking.status.replace("_", " ")} (user action)
+                                </SelectItem>
+                              )}
                             </SelectContent>
                           </Select>
                           {booking.status !== "cancelled" && booking.status !== "completed" && (
@@ -335,6 +403,15 @@ export default function AdminBookingsPage() {
                             >
                               Cancel
                             </Button>
+                          )}
+                          {(booking.status === "checked_in" || booking.status === "checked_out" || booking.status === "completed") && (
+                            <button
+                              onClick={() => setExpandedInspection(expandedInspection === booking._id ? null : booking._id)}
+                              className="h-7 text-xs text-muted-foreground hover:text-foreground cursor-pointer flex items-center gap-1"
+                            >
+                              {expandedInspection === booking._id ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                              Inspections
+                            </button>
                           )}
                         </div>
                       </div>
@@ -373,6 +450,11 @@ export default function AdminBookingsPage() {
                         <div className="text-xs bg-destructive/10 text-destructive border border-destructive/20 rounded px-2 py-1">
                           Cancellation reason: {booking.cancellationReason}
                         </div>
+                      )}
+
+                      {/* Inspection history panel */}
+                      {expandedInspection === booking._id && (
+                        <AdminInspectionPanel bookingId={booking._id} />
                       )}
                     </div>
                   </div>

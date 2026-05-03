@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button.tsx";
 import { SignInButton } from "@/components/ui/signin.tsx";
 import { Authenticated, Unauthenticated } from "convex/react";
 import { useAuth } from "@/hooks/use-auth.ts";
-import { CarFront, Menu, X, User, LayoutDashboard, ShieldCheck } from "lucide-react";
+import { Menu, X, User, LayoutDashboard, ShieldCheck } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils.ts";
 import {
@@ -22,6 +22,7 @@ export default function Navbar() {
   const links = [
     { href: "/cars", label: "Browse Cars" },
     { href: "/about", label: "About" },
+    { href: "/faq", label: "FAQ" },
   ];
 
   return (
@@ -30,10 +31,8 @@ export default function Navbar() {
         <div className="flex h-16 items-center justify-between">
           {/* Logo */}
           <Link to="/" className="flex items-center gap-2 cursor-pointer">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
-              <CarFront className="h-5 w-5 text-primary-foreground" />
-            </div>
-            <span className="text-lg font-bold tracking-tight">
+            <img src="https://hercules-cdn.com/file_TzkbkvKgaG8c5mb8GR10u73n" alt="YYCDrive" className="h-8 w-auto rounded" />
+            <span className="text-lg font-bold tracking-tight hidden sm:block">
               YYC<span className="text-primary">Drive</span>
             </span>
           </Link>

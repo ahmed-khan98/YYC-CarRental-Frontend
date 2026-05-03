@@ -15,7 +15,7 @@ import { toast } from "sonner";
 import { ConvexError } from "convex/values";
 import { motion } from "motion/react";
 import { format } from "date-fns";
-import { Car, Calendar, MapPin, DollarSign, Clock, XCircle, CheckCircle, LogIn, LogOut, Upload, X } from "lucide-react";
+import { Car, Calendar, MapPin, DollarSign, Clock, XCircle, CheckCircle, LogIn, LogOut, Upload, X, ChevronDown, ChevronUp, Gauge, Fuel, FileText, Camera } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog.tsx";
 import { Input } from "@/components/ui/input.tsx";
@@ -56,6 +56,7 @@ type BookingType = {
   totalAmount: number;
   _creationTime: number;
   cancellationReason?: string;
+  cancelledBy?: string;
 };
 
 function CheckInOutDialog({
@@ -88,7 +89,6 @@ function CheckInOutDialog({
     if (!mileage) { toast.error("Please enter mileage"); return; }
     setLoading(true);
     try {
-      // Upload images
       const storageIds: Id<"_storage">[] = [];
       for (const file of imageFiles) {
         const uploadUrl = await generateUploadUrl();
@@ -111,6 +111,7 @@ function CheckInOutDialog({
         imageStorageIds: storageIds.length > 0 ? storageIds : undefined,
       });
 
+      // updateStatus auto-completes booking on checkout
       const newStatus = type === "check_in" ? "checked_in" : "checked_out";
       await updateBooking({ bookingId: booking._id, status: newStatus });
 
@@ -204,6 +205,64 @@ function CheckInOutDialog({
   );
 }
 
+function InspectionHistory({ bookingId }: { bookingId: Id<"bookings"> }) {
+  const inspections = useQuery(api.inspections.listByBooking, { bookingId });
+
+  if (!inspections || inspections.length === 0) return null;
+
+  return (
+    <div className="mt-3 space-y-2">
+      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Inspection History</p>
+      {inspections.map((insp) => (
+        <div key={insp._id} className="bg-muted/30 rounded-lg p-3 border border-border/40 space-y-2">
+          <div className="flex items-center gap-2">
+            {insp.type === "check_in" ? (
+              <LogIn className="h-3.5 w-3.5 text-primary shrink-0" />
+            ) : (
+              <LogOut className="h-3.5 w-3.5 text-blue-400 shrink-0" />
+            )}
+            <span className="text-xs font-semibold">{insp.type === "check_in" ? "Check-In" : "Check-Out"}</span>
+            <span className="text-xs text-muted-foreground ml-auto">
+              {format(new Date(insp._creationTime), "MMM d, yyyy h:mm a")}
+            </span>
+          </div>
+          <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-muted-foreground">
+            <div className="flex items-center gap-1">
+              <Gauge className="h-3 w-3 shrink-0" />
+              <span>Mileage: <span className="text-foreground">{insp.mileage.toLocaleString()} km</span></span>
+            </div>
+            <div className="flex items-center gap-1">
+              <Fuel className="h-3 w-3 shrink-0" />
+              <span>Fuel: <span className="text-foreground capitalize">{insp.fuelLevel.replace("_", " ")}</span></span>
+            </div>
+            {insp.notes && (
+              <div className="col-span-2 flex items-start gap-1">
+                <FileText className="h-3 w-3 shrink-0 mt-0.5" />
+                <span>Notes: <span className="text-foreground">{insp.notes}</span></span>
+              </div>
+            )}
+          </div>
+          {insp.resolvedImageUrls && insp.resolvedImageUrls.length > 0 && (
+            <div className="space-y-1">
+              <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                <Camera className="h-3 w-3" />
+                <span>Photos ({insp.resolvedImageUrls.length})</span>
+              </div>
+              <div className="flex gap-2 flex-wrap">
+                {insp.resolvedImageUrls.map((url, i) => (
+                  <a key={i} href={url} target="_blank" rel="noopener noreferrer">
+                    <img src={url} alt={`Inspection ${i + 1}`} className="h-14 w-20 object-cover rounded cursor-pointer hover:opacity-80 transition-opacity" />
+                  </a>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function BookingCard({ booking }: { booking: BookingType }) {
   const car = useQuery(api.cars.get, { carId: booking.carId });
   const pickupLocation = useQuery(api.locations.get, { locationId: booking.pickupLocationId });
@@ -212,6 +271,7 @@ function BookingCard({ booking }: { booking: BookingType }) {
 
   const [checkInOpen, setCheckInOpen] = useState(false);
   const [checkOutOpen, setCheckOutOpen] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
 
   const handleCancel = async () => {
     try {
@@ -280,15 +340,25 @@ function BookingCard({ booking }: { booking: BookingType }) {
                   </Badge>
                 </div>
 
-                {/* Cancellation reason */}
-                {booking.cancellationReason && (
+                {/* Cancellation reason — only show when admin cancelled */}
+                {booking.status === "cancelled" && booking.cancelledBy === "admin" && booking.cancellationReason && (
                   <div className="mt-2 text-xs bg-destructive/10 text-destructive border border-destructive/20 rounded px-2 py-1">
-                    Cancelled: {booking.cancellationReason}
+                    Cancelled by admin: {booking.cancellationReason}
+                  </div>
+                )}
+                {booking.status === "cancelled" && booking.cancelledBy === "user" && (
+                  <div className="mt-2 text-xs bg-muted/50 text-muted-foreground border border-border/50 rounded px-2 py-1">
+                    You cancelled this booking.
+                  </div>
+                )}
+                {booking.status === "cancelled" && !booking.cancelledBy && (
+                  <div className="mt-2 text-xs bg-muted/50 text-muted-foreground border border-border/50 rounded px-2 py-1">
+                    This booking was cancelled.
                   </div>
                 )}
 
                 {/* Action buttons */}
-                <div className="mt-2 flex gap-2 flex-wrap">
+                <div className="mt-2 flex gap-2 flex-wrap items-center">
                   {(booking.status === "pending" || booking.status === "confirmed") && (
                     <Button
                       variant="ghost"
@@ -318,7 +388,18 @@ function BookingCard({ booking }: { booking: BookingType }) {
                       <LogOut className="h-3 w-3 mr-1" /> Check Out
                     </Button>
                   )}
+                  {(booking.status === "checked_in" || booking.status === "checked_out" || booking.status === "completed") && (
+                    <button
+                      onClick={() => setShowHistory(!showHistory)}
+                      className="h-7 text-xs text-muted-foreground hover:text-foreground cursor-pointer flex items-center gap-1 ml-auto"
+                    >
+                      {showHistory ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                      Inspection History
+                    </button>
+                  )}
                 </div>
+
+                {showHistory && <InspectionHistory bookingId={booking._id} />}
               </div>
             </div>
           </CardContent>
@@ -368,7 +449,6 @@ function DashboardInner() {
         <p className="text-muted-foreground mt-1">Welcome back, {user?.profile.name ?? "Driver"}</p>
       </motion.div>
 
-      {/* Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
         {[
           { icon: Car, label: "Total Bookings", value: stats.total },
@@ -393,7 +473,6 @@ function DashboardInner() {
         ))}
       </div>
 
-      {/* Bookings */}
       <Card className="border-border/50 bg-card/30">
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="text-lg">Rental History</CardTitle>
@@ -412,7 +491,7 @@ function DashboardInner() {
             bookings
               .slice()
               .sort((a, b) => b._creationTime - a._creationTime)
-              .map((booking) => <BookingCard key={booking._id} booking={booking} />)
+              .map((booking) => <BookingCard key={booking._id} booking={booking as BookingType} />)
           )}
         </CardContent>
       </Card>

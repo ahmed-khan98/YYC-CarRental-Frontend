@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { CarFront, MapPin, Phone, Mail } from "lucide-react";
+import { MapPin, Phone, Mail } from "lucide-react";
 
 export default function Footer() {
   const year = new Date().getFullYear();
@@ -10,9 +10,7 @@ export default function Footer() {
           {/* Brand */}
           <div className="space-y-3">
             <div className="flex items-center gap-2">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
-                <CarFront className="h-5 w-5 text-primary-foreground" />
-              </div>
+              <img src="https://hercules-cdn.com/file_TzkbkvKgaG8c5mb8GR10u73n" alt="YYCDrive" className="h-8 w-auto rounded" />
               <span className="text-lg font-bold">YYC<span className="text-primary">Drive</span></span>
             </div>
             <p className="text-sm text-muted-foreground leading-relaxed">
@@ -27,6 +25,7 @@ export default function Footer() {
               <li><Link to="/cars" className="hover:text-primary transition-colors cursor-pointer">Browse Cars</Link></li>
               <li><Link to="/dashboard" className="hover:text-primary transition-colors cursor-pointer">My Bookings</Link></li>
               <li><Link to="/about" className="hover:text-primary transition-colors cursor-pointer">About Us</Link></li>
+              <li><Link to="/faq" className="hover:text-primary transition-colors cursor-pointer">FAQ</Link></li>
             </ul>
           </div>
 
@@ -44,9 +43,9 @@ export default function Footer() {
           <div className="space-y-3">
             <h4 className="text-sm font-semibold text-foreground">Legal</h4>
             <ul className="space-y-2 text-sm text-muted-foreground">
-              <li><span className="hover:text-primary transition-colors cursor-pointer">Privacy Policy</span></li>
-              <li><span className="hover:text-primary transition-colors cursor-pointer">Terms of Service</span></li>
-              <li><span className="hover:text-primary transition-colors cursor-pointer">Cookie Policy</span></li>
+              <li><Link to="/privacy" className="hover:text-primary transition-colors cursor-pointer">Privacy Policy</Link></li>
+              <li><Link to="/terms" className="hover:text-primary transition-colors cursor-pointer">Terms of Service</Link></li>
+              <li><Link to="/faq" className="hover:text-primary transition-colors cursor-pointer">FAQ</Link></li>
             </ul>
           </div>
         </div>

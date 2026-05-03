@@ -8,6 +8,10 @@ import CarDetailPage from "./pages/cars/[id]/page.tsx";
 import BookPage from "./pages/book/[id]/page.tsx";
 import DashboardPage from "./pages/dashboard/page.tsx";
 import ProfilePage from "./pages/profile/page.tsx";
+import AboutPage from "./pages/about/page.tsx";
+import PrivacyPage from "./pages/privacy/page.tsx";
+import TermsPage from "./pages/terms/page.tsx";
+import FAQPage from "./pages/faq/page.tsx";
 import AdminLayout from "./pages/admin/layout.tsx";
 import AdminOverview from "./pages/admin/page.tsx";
 import AdminCarsPage from "./pages/admin/cars/page.tsx";
@@ -29,6 +33,10 @@ export default function App() {
           <Route path="/book/:id" element={<BookPage />} />
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/profile" element={<ProfilePage />} />
+          <Route path="/about" element={<AboutPage />} />
+          <Route path="/privacy" element={<PrivacyPage />} />
+          <Route path="/terms" element={<TermsPage />} />
+          <Route path="/faq" element={<FAQPage />} />
 
           {/* Admin routes with sidebar layout */}
           <Route path="/admin" element={<AdminLayout />}>
