@@ -2,6 +2,21 @@ import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { ConvexError } from "convex/values";
 
+// Check if two date ranges overlap
+function datesOverlap(
+  existingPickup: string,
+  existingReturn: string,
+  requestedPickup: string,
+  requestedReturn: string
+): boolean {
+  const ep = new Date(existingPickup).getTime();
+  const er = new Date(existingReturn).getTime();
+  const rp = new Date(requestedPickup).getTime();
+  const rr = new Date(requestedReturn).getTime();
+  // Ranges overlap if: existing starts before requested ends AND existing ends after requested starts
+  return ep < rr && er > rp;
+}
+
 export const create = mutation({
   args: {
     carId: v.id("cars"),
@@ -27,9 +42,23 @@ export const create = mutation({
 
     const car = await ctx.db.get(args.carId);
     if (!car) throw new ConvexError({ message: "Car not found", code: "NOT_FOUND" });
-    if (!car.isAvailable) throw new ConvexError({ message: "Car not available", code: "BAD_REQUEST" });
 
-    // Calculate total
+    // Check date overlap with existing active bookings
+    const existingBookings = await ctx.db
+      .query("bookings")
+      .withIndex("by_car", (q) => q.eq("carId", args.carId))
+      .collect();
+
+    const conflicting = existingBookings.find(
+      (b) =>
+        b.status !== "cancelled" &&
+        b.status !== "completed" &&
+        datesOverlap(b.pickupDate, b.returnDate, args.pickupDate, args.returnDate)
+    );
+    if (conflicting) {
+      throw new ConvexError({ message: "Car is not available for the selected dates", code: "BAD_REQUEST" });
+    }
+
     const pickup = new Date(args.pickupDate);
     const returnD = new Date(args.returnDate);
     const days = Math.max(1, Math.ceil((returnD.getTime() - pickup.getTime()) / (1000 * 60 * 60 * 24)));
@@ -51,7 +80,7 @@ export const create = mutation({
       pickupTime: args.pickupTime,
       returnDate: args.returnDate,
       returnTime: args.returnTime,
-      status: "pending",
+      status: "confirmed", // auto-confirm
       totalAmount: total,
       additionalServiceIds: args.additionalServiceIds,
       licenseUrl: args.licenseUrl,
@@ -154,6 +183,22 @@ export const getById = query({
   },
 });
 
+// Query available cars for date range
+export const getUnavailableCarIds = query({
+  args: { pickupDate: v.string(), returnDate: v.string() },
+  handler: async (ctx, args) => {
+    const allBookings = await ctx.db.query("bookings").collect();
+    const unavailable = new Set<string>();
+    for (const b of allBookings) {
+      if (b.status === "cancelled" || b.status === "completed") continue;
+      if (datesOverlap(b.pickupDate, b.returnDate, args.pickupDate, args.returnDate)) {
+        unavailable.add(b.carId);
+      }
+    }
+    return Array.from(unavailable);
+  },
+});
+
 export const updateStatus = mutation({
   args: {
     bookingId: v.id("bookings"),
@@ -161,14 +206,22 @@ export const updateStatus = mutation({
       v.literal("pending"), v.literal("confirmed"), v.literal("checked_in"),
       v.literal("checked_out"), v.literal("completed"), v.literal("cancelled")
     ),
+    cancellationReason: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    await ctx.db.patch(args.bookingId, { status: args.status });
+    const patch: Record<string, string> = { status: args.status };
+    if (args.cancellationReason) {
+      patch.cancellationReason = args.cancellationReason;
+    }
+    await ctx.db.patch(args.bookingId, patch);
   },
 });
 
 export const cancel = mutation({
-  args: { bookingId: v.id("bookings") },
+  args: {
+    bookingId: v.id("bookings"),
+    reason: v.optional(v.string()),
+  },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new ConvexError({ message: "Not authenticated", code: "UNAUTHENTICATED" });
@@ -180,9 +233,38 @@ export const cancel = mutation({
 
     const booking = await ctx.db.get(args.bookingId);
     if (!booking) throw new ConvexError({ message: "Booking not found", code: "NOT_FOUND" });
-    if (booking.userId !== user._id && user.role !== "admin") {
+
+    const isAdmin = user.role === "admin";
+    const isOwner = booking.userId === user._id;
+
+    if (!isAdmin && !isOwner) {
       throw new ConvexError({ message: "Forbidden", code: "FORBIDDEN" });
     }
-    await ctx.db.patch(args.bookingId, { status: "cancelled" });
+
+    // User cancellation: must be 24h before pickup
+    if (!isAdmin && isOwner) {
+      const pickupTime = new Date(booking.pickupDate);
+      if (booking.pickupTime) {
+        const [h, m] = booking.pickupTime.split(":").map(Number);
+        pickupTime.setHours(h, m, 0, 0);
+      }
+      const cutoff = new Date(pickupTime.getTime() - 24 * 60 * 60 * 1000);
+      if (new Date() > cutoff) {
+        throw new ConvexError({
+          message: "Cancellation is not allowed within 24 hours of pickup",
+          code: "BAD_REQUEST",
+        });
+      }
+    }
+
+    // Admin must provide reason
+    if (isAdmin && !args.reason) {
+      throw new ConvexError({ message: "Admin must provide a cancellation reason", code: "BAD_REQUEST" });
+    }
+
+    await ctx.db.patch(args.bookingId, {
+      status: "cancelled",
+      cancellationReason: args.reason,
+    });
   },
 });

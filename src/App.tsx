@@ -7,6 +7,7 @@ import CarsPage from "./pages/cars/page.tsx";
 import CarDetailPage from "./pages/cars/[id]/page.tsx";
 import BookPage from "./pages/book/[id]/page.tsx";
 import DashboardPage from "./pages/dashboard/page.tsx";
+import ProfilePage from "./pages/profile/page.tsx";
 import AdminLayout from "./pages/admin/layout.tsx";
 import AdminOverview from "./pages/admin/page.tsx";
 import AdminCarsPage from "./pages/admin/cars/page.tsx";
@@ -27,6 +28,7 @@ export default function App() {
           <Route path="/cars/:id" element={<CarDetailPage />} />
           <Route path="/book/:id" element={<BookPage />} />
           <Route path="/dashboard" element={<DashboardPage />} />
+          <Route path="/profile" element={<ProfilePage />} />
 
           {/* Admin routes with sidebar layout */}
           <Route path="/admin" element={<AdminLayout />}>

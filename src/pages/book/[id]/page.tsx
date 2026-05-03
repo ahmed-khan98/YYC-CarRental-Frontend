@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api.js";
 import type { Id } from "@/convex/_generated/dataModel.d.ts";
@@ -40,6 +40,7 @@ const TIME_OPTIONS = [
 
 function BookingForm({ carId }: { carId: Id<"cars"> }) {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const car = useQuery(api.cars.get, { carId });
   const locations = useQuery(api.locations.list, { activeOnly: true });
   const services = useQuery(api.services.list, { activeOnly: true });
@@ -48,11 +49,11 @@ function BookingForm({ carId }: { carId: Id<"cars"> }) {
   const today = format(new Date(), "yyyy-MM-dd");
   const tomorrow = format(new Date(Date.now() + 86400000), "yyyy-MM-dd");
 
-  const [pickupDate, setPickupDate] = useState(today);
-  const [pickupTime, setPickupTime] = useState("10:00");
-  const [returnDate, setReturnDate] = useState(tomorrow);
-  const [returnTime, setReturnTime] = useState("10:00");
-  const [pickupLocationId, setPickupLocationId] = useState<string>("");
+  const [pickupDate, setPickupDate] = useState(searchParams.get("pickupDate") ?? today);
+  const [pickupTime, setPickupTime] = useState(searchParams.get("pickupTime") ?? "10:00");
+  const [returnDate, setReturnDate] = useState(searchParams.get("dropoffDate") ?? tomorrow);
+  const [returnTime, setReturnTime] = useState(searchParams.get("dropoffTime") ?? "10:00");
+  const [pickupLocationId, setPickupLocationId] = useState<string>(searchParams.get("pickupLocation") ?? "");
   const [dropoffLocationId, setDropoffLocationId] = useState<string>("");
   const [selectedServices, setSelectedServices] = useState<string[]>([]);
   const [notes, setNotes] = useState("");

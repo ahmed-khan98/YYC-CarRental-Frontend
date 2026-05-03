@@ -85,6 +85,7 @@ export default function Index() {
 
   const [pickupLocation, setPickupLocation] = useState("");
   const [dropoffLocation, setDropoffLocation] = useState("");
+  const [vehicleType, setVehicleType] = useState("");
   const [pickupDate, setPickupDate] = useState(today);
   const [pickupTime, setPickupTime] = useState("10:00");
   const [dropoffDate, setDropoffDate] = useState(tomorrow);
@@ -94,6 +95,7 @@ export default function Index() {
     const params = new URLSearchParams();
     if (pickupLocation) params.set("pickupLocation", pickupLocation);
     if (dropoffLocation) params.set("dropoffLocation", dropoffLocation);
+    if (vehicleType) params.set("category", vehicleType);
     if (pickupDate) params.set("pickupDate", pickupDate);
     if (pickupTime) params.set("pickupTime", pickupTime);
     if (dropoffDate) params.set("dropoffDate", dropoffDate);
@@ -205,6 +207,28 @@ export default function Index() {
                     </SelectContent>
                   </Select>
                 </div>
+              </div>
+
+              {/* Row 1b: Vehicle Type */}
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground flex items-center gap-1">
+                  <Car className="h-3 w-3 text-primary" /> Vehicle Type
+                </Label>
+                <Select value={vehicleType} onValueChange={setVehicleType}>
+                  <SelectTrigger className="bg-secondary/50 border-0 h-10">
+                    <SelectValue placeholder="All vehicle types" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All vehicle types</SelectItem>
+                    <SelectItem value="economy">Economy</SelectItem>
+                    <SelectItem value="compact">Compact</SelectItem>
+                    <SelectItem value="sedan">Sedan</SelectItem>
+                    <SelectItem value="suv">SUV</SelectItem>
+                    <SelectItem value="luxury">Luxury</SelectItem>
+                    <SelectItem value="sports">Sports</SelectItem>
+                    <SelectItem value="van">Van</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
 
               {/* Row 2: Dates & Times */}

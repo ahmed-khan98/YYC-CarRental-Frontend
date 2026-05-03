@@ -9,7 +9,9 @@ export default defineSchema({
     role: v.optional(v.union(v.literal("admin"), v.literal("customer"))),
     phone: v.optional(v.string()),
     licenseUrl: v.optional(v.string()),
+    licenseStorageId: v.optional(v.id("_storage")),
     licenseVerified: v.optional(v.boolean()),
+    profileComplete: v.optional(v.boolean()),
   }).index("by_token", ["tokenIdentifier"]),
 
   cars: defineTable({
@@ -30,6 +32,7 @@ export default defineSchema({
     dailyRate: v.number(),
     imageUrl: v.optional(v.string()),
     imageUrls: v.optional(v.array(v.string())),
+    imageStorageIds: v.optional(v.array(v.id("_storage"))),
     seats: v.number(),
     transmission: v.union(v.literal("automatic"), v.literal("manual")),
     fuelType: v.union(v.literal("gasoline"), v.literal("diesel"), v.literal("electric"), v.literal("hybrid")),
@@ -86,6 +89,7 @@ export default defineSchema({
     licenseUrl: v.optional(v.string()),
     notes: v.optional(v.string()),
     paymentStatus: v.optional(v.union(v.literal("pending"), v.literal("paid"), v.literal("refunded"))),
+    cancellationReason: v.optional(v.string()),
   })
     .index("by_user", ["userId"])
     .index("by_car", ["carId"])
@@ -105,6 +109,7 @@ export default defineSchema({
     ),
     notes: v.optional(v.string()),
     imageUrls: v.optional(v.array(v.string())),
+    imageStorageIds: v.optional(v.array(v.id("_storage"))),
     conductedBy: v.id("users"),
   })
     .index("by_booking", ["bookingId"])
