@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { useQuery, useMutation } from "convex/react";
-import { api } from "@/convex/_generated/api.js";
-import type { Id } from "@/convex/_generated/dataModel.d.ts";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { carsApi } from "@/api/cars.api.ts";
+import { maintenanceApi } from "@/api/maintenance.api.ts";
+import type { MaintenanceStatus } from "@/types/index.ts";
 import { Button } from "@/components/ui/button.tsx";
 import { Input } from "@/components/ui/input.tsx";
 import { Label } from "@/components/ui/label.tsx";
@@ -11,10 +12,9 @@ import { Skeleton } from "@/components/ui/skeleton.tsx";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog.tsx";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select.tsx";
 import { toast } from "sonner";
-import { Plus, Pencil, Wrench } from "lucide-react";
+import { Plus, Wrench } from "lucide-react";
 import { format } from "date-fns";
 
-type MaintenanceStatus = "scheduled" | "in_progress" | "completed";
 interface MaintForm {
   carId: string; type: string; description: string; scheduledDate: string; cost: string; notes: string;
 }
@@ -27,16 +27,35 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 export default function AdminMaintenancePage() {
-  const cars = useQuery(api.cars.list, {});
-  const maintenanceScheduled = useQuery(api.maintenance.listByStatus, { status: "scheduled" });
-  const maintenanceInProgress = useQuery(api.maintenance.listByStatus, { status: "in_progress" });
-  const maintenanceCompleted = useQuery(api.maintenance.listByStatus, { status: "completed" });
+  const queryClient = useQueryClient();
+  const { data: cars } = useQuery({
+    queryKey: ["cars"],
+    queryFn: () => carsApi.list(),
+  });
+  const { data: maintenanceScheduled, isLoading: scheduledLoading } = useQuery({
+    queryKey: ["maintenance", "scheduled"],
+    queryFn: () => maintenanceApi.listByStatus("scheduled"),
+  });
+  const { data: maintenanceInProgress } = useQuery({
+    queryKey: ["maintenance", "in_progress"],
+    queryFn: () => maintenanceApi.listByStatus("in_progress"),
+  });
+  const { data: maintenanceCompleted } = useQuery({
+    queryKey: ["maintenance", "completed"],
+    queryFn: () => maintenanceApi.listByStatus("completed"),
+  });
 
-  const createMaint = useMutation(api.maintenance.create);
-  const updateMaint = useMutation(api.maintenance.update);
+  const createMaint = useMutation({
+    mutationFn: maintenanceApi.create,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["maintenance"] }),
+  });
+  const updateMaint = useMutation({
+    mutationFn: ({ maintenanceId, data }: { maintenanceId: string; data: Parameters<typeof maintenanceApi.update>[1] }) =>
+      maintenanceApi.update(maintenanceId, data),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["maintenance"] }),
+  });
 
   const [open, setOpen] = useState(false);
-  const [editId, setEditId] = useState<Id<"maintenance"> | null>(null);
   const [form, setForm] = useState<MaintForm>(EMPTY);
   const [loading, setLoading] = useState(false);
 
@@ -49,38 +68,32 @@ export default function AdminMaintenancePage() {
   const f = (k: keyof MaintForm) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
     setForm((p) => ({ ...p, [k]: e.target.value }));
 
-  const openCreate = () => { setForm(EMPTY); setEditId(null); setOpen(true); };
+  const openCreate = () => { setForm(EMPTY); setOpen(true); };
 
   const handleSave = async () => {
     if (!form.carId || !form.type || !form.scheduledDate) { toast.error("Fill required fields"); return; }
     setLoading(true);
     try {
-      if (editId) {
-        await updateMaint({
-          maintenanceId: editId,
-          notes: form.notes || undefined,
-          cost: form.cost ? Number(form.cost) : undefined,
-        });
-        toast.success("Maintenance updated");
-      } else {
-        await createMaint({
-          carId: form.carId as Id<"cars">,
-          type: form.type,
-          description: form.description,
-          scheduledDate: new Date(form.scheduledDate).toISOString(),
-          cost: form.cost ? Number(form.cost) : undefined,
-          notes: form.notes || undefined,
-        });
-        toast.success("Maintenance scheduled");
-      }
+      await createMaint.mutateAsync({
+        carId: form.carId,
+        type: form.type,
+        description: form.description,
+        scheduledDate: new Date(form.scheduledDate).toISOString(),
+        cost: form.cost ? Number(form.cost) : undefined,
+        notes: form.notes || undefined,
+      });
+      toast.success("Maintenance scheduled");
       setOpen(false);
     } catch { toast.error("Failed to save"); }
     finally { setLoading(false); }
   };
 
-  const handleMarkComplete = async (id: Id<"maintenance">) => {
+  const handleMarkComplete = async (id: string) => {
     try {
-      await updateMaint({ maintenanceId: id, status: "completed", completedDate: new Date().toISOString() });
+      await updateMaint.mutateAsync({
+        maintenanceId: id,
+        data: { status: "completed" as MaintenanceStatus, completedDate: new Date().toISOString() },
+      });
       toast.success("Marked as completed");
     } catch { toast.error("Failed to update"); }
   };
@@ -95,7 +108,7 @@ export default function AdminMaintenancePage() {
         <Button onClick={openCreate} className="cursor-pointer"><Plus className="h-4 w-4 mr-2" />Schedule Maintenance</Button>
       </div>
 
-      {maintenanceScheduled === undefined ? (
+      {scheduledLoading ? (
         <div className="space-y-3">{Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-16 w-full" />)}</div>
       ) : allMaintenance.length === 0 ? (
         <div className="text-center py-16">

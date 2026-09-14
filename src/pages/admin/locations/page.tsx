@@ -1,29 +1,48 @@
 import { useState } from "react";
-import { useQuery, useMutation } from "convex/react";
-import { api } from "@/convex/_generated/api.js";
-import type { Id } from "@/convex/_generated/dataModel.d.ts";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { locationsApi } from "@/api/locations.api.ts";
+import type { Location } from "@/types/index.ts";
 import { Button } from "@/components/ui/button.tsx";
 import { Input } from "@/components/ui/input.tsx";
 import { Label } from "@/components/ui/label.tsx";
-import { Card, CardContent } from "@/components/ui/card.tsx";
-import { Skeleton } from "@/components/ui/skeleton.tsx";
+import { AdminDataTable, type AdminTableColumn } from "@/components/admin-data-table.tsx";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog.tsx";
 import { Switch } from "@/components/ui/switch.tsx";
 import { toast } from "sonner";
 import { Plus, Pencil, Trash2, MapPin } from "lucide-react";
+import { Hint } from "@/components/ui/tooltip.tsx";
 import { Badge } from "@/components/ui/badge.tsx";
+import { patchText } from "@/lib/patchPayload.ts";
+import { useAuth } from "@/hooks/use-auth.ts";
+import { canDeleteRecords } from "@/lib/roles.ts";
 
 interface LocForm { name: string; address: string; city: string; phone: string; }
 const EMPTY: LocForm = { name: "", address: "", city: "", phone: "" };
 
 export default function AdminLocationsPage() {
-  const locations = useQuery(api.locations.list, {});
-  const create = useMutation(api.locations.create);
-  const update = useMutation(api.locations.update);
-  const remove = useMutation(api.locations.remove);
+  const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const canDelete = canDeleteRecords(user?.role);
+  const { data: locations, isLoading } = useQuery({
+    queryKey: ["locations"],
+    queryFn: () => locationsApi.list(),
+  });
+  const create = useMutation({
+    mutationFn: locationsApi.create,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["locations"] }),
+  });
+  const update = useMutation({
+    mutationFn: ({ locationId, data }: { locationId: string; data: Partial<Location> }) =>
+      locationsApi.update(locationId, data),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["locations"] }),
+  });
+  const remove = useMutation({
+    mutationFn: locationsApi.remove,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["locations"] }),
+  });
 
   const [open, setOpen] = useState(false);
-  const [editId, setEditId] = useState<Id<"locations"> | null>(null);
+  const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState<LocForm>(EMPTY);
   const [loading, setLoading] = useState(false);
 
@@ -31,7 +50,7 @@ export default function AdminLocationsPage() {
     setForm((p) => ({ ...p, [k]: e.target.value }));
 
   const openCreate = () => { setForm(EMPTY); setEditId(null); setOpen(true); };
-  const openEdit = (loc: NonNullable<typeof locations>[number]) => {
+  const openEdit = (loc: Location) => {
     setForm({ name: loc.name, address: loc.address, city: loc.city, phone: loc.phone ?? "" });
     setEditId(loc._id);
     setOpen(true);
@@ -42,10 +61,13 @@ export default function AdminLocationsPage() {
     setLoading(true);
     try {
       if (editId) {
-        await update({ locationId: editId, name: form.name, address: form.address, city: form.city, phone: form.phone || undefined });
+        await update.mutateAsync({
+          locationId: editId,
+          data: { name: form.name, address: form.address, city: form.city, phone: patchText(form.phone) },
+        });
         toast.success("Location updated");
       } else {
-        await create({ name: form.name, address: form.address, city: form.city, phone: form.phone || undefined });
+        await create.mutateAsync({ name: form.name, address: form.address, city: form.city, phone: patchText(form.phone) || undefined });
         toast.success("Location added");
       }
       setOpen(false);
@@ -53,16 +75,88 @@ export default function AdminLocationsPage() {
     finally { setLoading(false); }
   };
 
-  const handleDelete = async (id: Id<"locations">) => {
+  const handleDelete = async (id: string) => {
     if (!confirm("Delete this location?")) return;
-    try { await remove({ locationId: id }); toast.success("Deleted"); }
+    try { await remove.mutateAsync(id); toast.success("Deleted"); }
     catch { toast.error("Failed to delete"); }
   };
 
-  const handleToggle = async (id: Id<"locations">, current: boolean) => {
-    await update({ locationId: id, isActive: !current });
+  const handleToggle = async (id: string, current: boolean) => {
+    await update.mutateAsync({ locationId: id, data: { isActive: !current } });
     toast.success(`Location ${!current ? "activated" : "deactivated"}`);
   };
+
+  const locationColumns: AdminTableColumn<Location>[] = [
+    {
+      id: "name",
+      header: "Name",
+      cell: (loc) => (
+        <div className="flex items-center gap-2 min-w-[140px]">
+          <MapPin className="h-4 w-4 text-primary shrink-0" />
+          <span className="font-medium">{loc.name}</span>
+        </div>
+      ),
+    },
+    {
+      id: "address",
+      header: "Address",
+      className: "hidden sm:table-cell",
+      headClassName: "hidden sm:table-cell",
+      cell: (loc) => <span className="text-sm">{loc.address}</span>,
+    },
+    {
+      id: "city",
+      header: "City",
+      cell: (loc) => loc.city,
+    },
+    {
+      id: "phone",
+      header: "Phone",
+      className: "hidden md:table-cell",
+      headClassName: "hidden md:table-cell",
+      cell: (loc) => loc.phone ?? "—",
+    },
+    {
+      id: "status",
+      header: "Status",
+      cell: (loc) => (
+        <Badge className={loc.isActive ? "bg-primary/20 text-primary border-primary/30 text-[10px]" : "bg-destructive/20 text-destructive border-destructive/30 text-[10px]"}>
+          {loc.isActive ? "Active" : "Inactive"}
+        </Badge>
+      ),
+    },
+    {
+      id: "active",
+      header: "Active",
+      className: "hidden lg:table-cell",
+      headClassName: "hidden lg:table-cell",
+      cell: (loc) => (
+        <Switch checked={loc.isActive} onCheckedChange={() => handleToggle(loc._id, loc.isActive)} className="cursor-pointer" />
+      ),
+    },
+    {
+      id: "actions",
+      header: "Actions",
+      className: "text-right",
+      headClassName: "text-right",
+      cell: (loc) => (
+        <div className="flex items-center justify-end gap-1">
+          <Hint label="Edit location">
+            <Button variant="ghost" size="icon" onClick={() => openEdit(loc)} className="cursor-pointer h-8 w-8" aria-label="Edit location">
+              <Pencil className="h-4 w-4" />
+            </Button>
+          </Hint>
+          {canDelete && (
+          <Hint label="Delete location">
+            <Button variant="ghost" size="icon" onClick={() => handleDelete(loc._id)} className="cursor-pointer h-8 w-8 text-destructive hover:text-destructive" aria-label="Delete location">
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          </Hint>
+          )}
+        </div>
+      ),
+    },
+  ];
 
   return (
     <div className="p-6 space-y-5">
@@ -74,39 +168,14 @@ export default function AdminLocationsPage() {
         <Button onClick={openCreate} className="cursor-pointer"><Plus className="h-4 w-4 mr-2" />Add Location</Button>
       </div>
 
-      {locations === undefined ? (
-        <div className="space-y-3">{Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-16 w-full" />)}</div>
-      ) : locations.length === 0 ? (
-        <div className="text-center py-16">
-          <MapPin className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
-          <p className="text-muted-foreground">No locations yet</p>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {locations.map((loc) => (
-            <Card key={loc._id} className="border-border/50 bg-card/60">
-              <CardContent className="p-4 flex items-center gap-3">
-                <MapPin className="h-5 w-5 text-primary shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="font-semibold">{loc.name}</span>
-                    <Badge className={loc.isActive ? "bg-primary/20 text-primary border-primary/30 text-[10px]" : "bg-destructive/20 text-destructive border-destructive/30 text-[10px]"}>
-                      {loc.isActive ? "Active" : "Inactive"}
-                    </Badge>
-                  </div>
-                  <p className="text-xs text-muted-foreground">{loc.address}, {loc.city}</p>
-                  {loc.phone && <p className="text-xs text-muted-foreground">{loc.phone}</p>}
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <Switch checked={loc.isActive} onCheckedChange={() => handleToggle(loc._id, loc.isActive)} className="cursor-pointer" />
-                  <Button variant="ghost" size="icon" onClick={() => openEdit(loc)} className="cursor-pointer"><Pencil className="h-4 w-4" /></Button>
-                  <Button variant="ghost" size="icon" onClick={() => handleDelete(loc._id)} className="cursor-pointer text-destructive hover:text-destructive"><Trash2 className="h-4 w-4" /></Button>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
+      <AdminDataTable
+        columns={locationColumns}
+        data={locations ?? []}
+        getRowKey={(loc) => loc._id}
+        isLoading={isLoading}
+        emptyIcon={MapPin}
+        emptyMessage="No locations yet"
+      />
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>

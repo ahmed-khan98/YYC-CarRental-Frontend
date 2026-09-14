@@ -28,3 +28,9 @@ tsconfig.tsbuildinfo
 
 # Environment variables
 .env*
+
+# Leftover backend / local scratch (do not push)
+/server/
+.tmp-*
+.tmp-agreement-xml/
+.tmp-agreement-xml-fresh/

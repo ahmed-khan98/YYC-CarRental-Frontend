@@ -1,11 +1,15 @@
 import * as React from "react";
 import { cn } from "@/lib/utils.ts";
 
-function Table({ className, ...props }: React.ComponentProps<"table">) {
+function Table({
+  className,
+  noScroll,
+  ...props
+}: React.ComponentProps<"table"> & { noScroll?: boolean }) {
   return (
     <div
       data-slot="table-container"
-      className="relative w-full overflow-x-auto"
+      className={cn("relative w-full", noScroll ? "overflow-x-hidden" : "overflow-x-auto overscroll-x-contain touch-pan-x")}
     >
       <table
         data-slot="table"

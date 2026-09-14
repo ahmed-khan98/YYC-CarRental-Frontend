@@ -1,7 +1,7 @@
-import { useState, useRef } from "react";
-import { useQuery, useMutation } from "convex/react";
-import { api } from "@/convex/_generated/api.js";
-import type { Id } from "@/convex/_generated/dataModel.d.ts";
+import { useState, useRef, useEffect } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { usersApi } from "@/api/users.api.ts";
+import { uploadFile } from "@/api/upload.api.ts";
 import Navbar from "@/components/navbar.tsx";
 import Footer from "@/components/footer.tsx";
 import { Button } from "@/components/ui/button.tsx";
@@ -9,33 +9,44 @@ import { Input } from "@/components/ui/input.tsx";
 import { Label } from "@/components/ui/label.tsx";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card.tsx";
 import { Skeleton } from "@/components/ui/skeleton.tsx";
-import { Authenticated, Unauthenticated, AuthLoading } from "convex/react";
+import { Authenticated, Unauthenticated, AuthLoading } from "@/components/auth-gate.tsx";
 import { SignInButton } from "@/components/ui/signin.tsx";
 import { toast } from "sonner";
+import { patchText } from "@/lib/patchPayload.ts";
 import { motion } from "motion/react";
 import { User, Phone, FileText, Upload, CheckCircle, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge.tsx";
+import { resolveMediaUrl } from "@/lib/mediaUrl.ts";
 
 function ProfileInner() {
-  const currentUser = useQuery(api.users.getCurrentUser, {});
-  const generateUploadUrl = useMutation(api.users.generateUploadUrl);
-  const updateProfile = useMutation(api.users.updateProfile);
+  const queryClient = useQueryClient();
+  const { data: currentUser, isLoading } = useQuery({
+    queryKey: ["users", "me"],
+    queryFn: () => usersApi.getCurrentUser(),
+  });
+  const updateProfile = useMutation({
+    mutationFn: usersApi.updateProfile,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["users", "me"] });
+    },
+  });
 
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [licenseFile, setLicenseFile] = useState<File | null>(null);
   const [licensePreview, setLicensePreview] = useState("");
   const [loading, setLoading] = useState(false);
-  const [initialized, setInitialized] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  // Pre-fill form once user loads
-  if (currentUser && !initialized) {
-    setName(currentUser.name ?? "");
-    setPhone(currentUser.phone ?? "");
-    if (currentUser.licenseUrl) setLicensePreview(currentUser.licenseUrl);
-    setInitialized(true);
-  }
+  useEffect(() => {
+    if (currentUser) {
+      setName(currentUser.name ?? "");
+      setPhone(currentUser.phone ?? "");
+      if (currentUser.licenseUrl && !licenseFile) {
+        setLicensePreview(resolveMediaUrl(currentUser.licenseUrl));
+      }
+    }
+  }, [currentUser, licenseFile]);
 
   const handleLicenseChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -47,22 +58,16 @@ function ProfileInner() {
   const handleSave = async () => {
     setLoading(true);
     try {
-      let licenseStorageId: Id<"_storage"> | undefined;
+      let licenseUrl: string | undefined;
       if (licenseFile) {
-        const uploadUrl = await generateUploadUrl();
-        const result = await fetch(uploadUrl, {
-          method: "POST",
-          headers: { "Content-Type": licenseFile.type },
-          body: licenseFile,
-        });
-        const { storageId } = await result.json() as { storageId: Id<"_storage"> };
-        licenseStorageId = storageId;
+        licenseUrl = await uploadFile(licenseFile, "licenses");
       }
-      await updateProfile({
-        name: name || undefined,
-        phone: phone || undefined,
-        licenseStorageId,
+      await updateProfile.mutateAsync({
+        name: patchText(name),
+        phone: patchText(phone),
+        licenseUrl,
       });
+      setLicenseFile(null);
       toast.success("Profile updated successfully");
     } catch {
       toast.error("Failed to update profile");
@@ -71,7 +76,7 @@ function ProfileInner() {
     }
   };
 
-  if (currentUser === undefined) {
+  if (isLoading) {
     return (
       <div className="space-y-4 max-w-lg">
         <Skeleton className="h-8 w-48" />
@@ -156,7 +161,7 @@ function ProfileInner() {
             {licensePreview ? (
               <div className="relative">
                 {licenseFile?.type.startsWith("image/") || (currentUser?.licenseUrl && !licenseFile) ? (
-                  <img src={licensePreview} alt="License" className="w-full h-40 object-contain rounded-lg" />
+                  <img src={resolveMediaUrl(licensePreview)} alt="License" className="w-full h-40 object-contain rounded-lg" />
                 ) : (
                   <div className="h-40 flex items-center justify-center">
                     <FileText className="h-12 w-12 text-primary" />

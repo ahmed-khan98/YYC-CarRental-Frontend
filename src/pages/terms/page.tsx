@@ -10,7 +10,7 @@ const SECTIONS = [
       "A valid driver's license issued at least 1 year prior to the rental date is required.",
       "A valid credit or debit card in the renter's name is required for the security deposit.",
       "International renters must present an International Driving Permit alongside their foreign license.",
-      "You must have a verified YYCDrive account with a completed profile, including uploaded driver's license.",
+      "You must have a verified YYC Car Rental account with a completed profile, including uploaded driver's license.",
     ],
   },
   {
@@ -20,16 +20,17 @@ const SECTIONS = [
       "Bookings are confirmed upon completion and are subject to our cancellation policy.",
       "The rental period begins and ends at the agreed pickup and return times.",
       "Returning a vehicle late without prior notice may result in additional charges at the standard daily rate.",
-      "YYCDrive reserves the right to cancel bookings in cases of suspected fraud or policy violations.",
+      "YYC Car Rental reserves the right to cancel bookings in cases of suspected fraud or policy violations.",
     ],
   },
   {
     title: "3. Cancellation Policy",
     content: [
-      "Customers may cancel a booking up to 24 hours before the scheduled pickup time without penalty.",
-      "Cancellations within 24 hours of pickup may be subject to a cancellation fee equivalent to one day's rental rate.",
+      "No payment is taken at booking. Payment is collected at check-in and any remaining balance at check-out.",
+      "72+ hours before pick-up: a 1-day rental fee is due if the booking is cancelled.",
+      "Within 72 hours of pick-up: the full booking amount is due if the booking is cancelled.",
       "No-shows (failure to pick up the vehicle without prior cancellation) will be charged the full booking amount.",
-      "YYCDrive may cancel a booking with a full refund in cases of vehicle unavailability due to unforeseen circumstances, with written reason provided to the customer.",
+      "YYC Car Rental may cancel a booking with a full refund in cases of vehicle unavailability due to unforeseen circumstances, with written reason provided to the customer.",
       "Refunds for eligible cancellations are processed within 5–10 business days.",
     ],
   },
@@ -38,9 +39,9 @@ const SECTIONS = [
     content: [
       "You are responsible for the vehicle during the rental period and must return it in the same condition as received.",
       "Vehicles must only be operated by the authorized renter listed on the booking. Additional drivers must be registered.",
-      "Smoking is strictly prohibited in all YYCDrive vehicles. A cleaning fee of $250 applies for violations.",
+      "Smoking is strictly prohibited in all YYC Car Rental vehicles. A cleaning fee of $250 applies for violations.",
       "Vehicles may not be used for racing, off-road driving, towing, or any illegal activities.",
-      "You must report any accidents, damage, or incidents to YYCDrive and local authorities immediately.",
+      "You must report any accidents, damage, or incidents to YYC Car Rental and local authorities immediately.",
       "Fuel policies vary by vehicle. Vehicles must be returned with the same fuel level as at pickup.",
     ],
   },
@@ -60,7 +61,7 @@ const SECTIONS = [
       "Basic third-party liability insurance is included in all rentals as required by Alberta law.",
       "Additional collision damage waiver (CDW) and comprehensive coverage are available as add-ons.",
       "Without optional CDW, renters are liable for repair costs up to the vehicle's current market value.",
-      "YYCDrive is not responsible for personal belongings left in rental vehicles.",
+      "YYC Car Rental is not responsible for personal belongings left in rental vehicles.",
       "Renters are fully liable for traffic violations, parking tickets, and fines incurred during the rental period.",
     ],
   },
@@ -79,7 +80,7 @@ const SECTIONS = [
       "These Terms of Service are governed by the laws of the Province of Alberta and the federal laws of Canada.",
       "Any disputes arising from these terms shall be resolved in the courts of Calgary, Alberta.",
       "If any provision of these Terms is found to be unenforceable, the remaining provisions remain in full effect.",
-      "YYCDrive reserves the right to update these Terms at any time. Continued use constitutes acceptance of updated terms.",
+      "YYC Car Rental reserves the right to update these Terms at any time. Continued use constitutes acceptance of updated terms.",
     ],
   },
 ];
@@ -95,7 +96,7 @@ export default function TermsPage() {
               <h1 className="text-4xl font-bold mb-3">Terms of Service</h1>
               <p className="text-muted-foreground">Last updated: January 1, 2025</p>
               <p className="text-muted-foreground mt-4 leading-relaxed">
-                These Terms of Service govern your use of the YYCDrive car rental platform. By creating an account or making a booking, you agree to be bound by these terms. Please read them carefully.
+                These Terms of Service govern your use of the YYC Car Rental platform. By creating an account or making a booking, you agree to be bound by these terms. Please read them carefully.
               </p>
             </motion.div>
 
@@ -126,7 +127,7 @@ export default function TermsPage() {
               <h2 className="text-lg font-semibold mb-2">Questions?</h2>
               <p className="text-sm text-muted-foreground">
                 For questions about these Terms of Service, contact us at:{" "}
-                <a href="mailto:legal@yycdrive.ca" className="text-primary hover:underline">legal@yycdrive.ca</a>
+                <a href="mailto:legal@yyccarrental.ca" className="text-primary hover:underline">legal@yyccarrental.ca</a>
               </p>
             </div>
           </div>

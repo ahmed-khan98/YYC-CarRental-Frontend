@@ -4,33 +4,15 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-    <title>YYC Drive — Premium Car Rentals</title>
-    <meta name="description" content="Premium car rentals. Book your dream ride today." />
-    <meta name="author" content="Hercules" />
-    <link
-      rel="icon"
-      type="image/svg+xml"
-      href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>"
-    />
+    <title>YYC Car Rental — Premium Car Rentals in Calgary</title>
+    <meta name="description" content="YYC Car Rental — premium car rentals in Calgary. Book your dream ride today." />
+    <link rel="icon" type="image/png" href="/yyc-logo.png" />
 
-    <meta property="og:title" content="Hercules App" />
-    <meta
-      property="og:description"
-      content="An app made by https://hercules.app"
-    />
+    <meta property="og:title" content="YYC Car Rental — Premium Car Rentals" />
+    <meta property="og:description" content="Premium car rentals in Calgary. Book your dream ride today." />
     <meta property="og:type" content="website" />
-    <meta
-      property="og:image"
-      content="https://hercules.app/og/app/%VITE_HERCULES_WEBSITE_ID%.png"
-    />
-    <meta property="og:image:type" content="image/png" />
 
     <meta name="twitter:card" content="summary_large_image" />
-    <meta
-      name="twitter:image"
-      content="https://hercules.app/og/app/%VITE_HERCULES_WEBSITE_ID%.png"
-    />
-    <meta name="twitter:site" content="@usehercules" />
 
     <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -45,13 +27,11 @@
     <script>
       try {
         let theme = localStorage.getItem("theme");
-        if (theme === "system" || !theme) {
-          let prefersDark = window.matchMedia(
-            "(prefers-color-scheme: dark)",
-          ).matches;
-          theme = prefersDark ? "dark" : "light";
+        if (!theme || theme === "system") {
+          theme = "light";
         }
-        document.documentElement.classList.add(theme);
+        document.documentElement.classList.remove("dark");
+        document.documentElement.classList.add("light");
       } catch (e) {}
     </script>
 

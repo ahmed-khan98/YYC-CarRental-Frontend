@@ -65,14 +65,14 @@ const SECTIONS = [
       "You have the right to access, correct, or delete your personal information.",
       "You may request a copy of the data we hold about you.",
       "You may opt out of non-essential communications at any time.",
-      "To exercise your rights, contact us at privacy@yycdrive.ca.",
+      "To exercise your rights, contact us at privacy@yyccarrental.ca.",
     ],
   },
   {
     title: "8. Changes to This Policy",
     content: [
       "We may update this Privacy Policy from time to time. We will notify you of significant changes by email or via a notice on our platform.",
-      "Continued use of YYCDrive after changes are posted constitutes your acceptance of the updated policy.",
+      "Continued use of YYC Car Rental after changes are posted constitutes your acceptance of the updated policy.",
     ],
   },
 ];
@@ -88,7 +88,7 @@ export default function PrivacyPage() {
               <h1 className="text-4xl font-bold mb-3">Privacy Policy</h1>
               <p className="text-muted-foreground">Last updated: January 1, 2025</p>
               <p className="text-muted-foreground mt-4 leading-relaxed">
-                YYCDrive ("we," "our," or "us") is committed to protecting your privacy. This Privacy Policy explains how we collect, use, and safeguard your information when you use our car rental platform.
+                YYC Car Rental ("we," "our," or "us") is committed to protecting your privacy. This Privacy Policy explains how we collect, use, and safeguard your information when you use our car rental platform.
               </p>
             </motion.div>
 
@@ -119,7 +119,7 @@ export default function PrivacyPage() {
               <h2 className="text-lg font-semibold mb-2">Contact Us</h2>
               <p className="text-sm text-muted-foreground">
                 If you have questions about this Privacy Policy or how we handle your data, please contact us at:{" "}
-                <a href="mailto:privacy@yycdrive.ca" className="text-primary hover:underline">privacy@yycdrive.ca</a>
+                <a href="mailto:privacy@yyccarrental.ca" className="text-primary hover:underline">privacy@yyccarrental.ca</a>
               </p>
             </div>
           </div>

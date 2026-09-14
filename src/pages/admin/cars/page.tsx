@@ -1,36 +1,50 @@
 import { useState, useRef } from "react";
-import { useQuery, useMutation } from "convex/react";
-import { api } from "@/convex/_generated/api.js";
-import type { Id } from "@/convex/_generated/dataModel.d.ts";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
+import { carsApi } from "@/api/cars.api.ts";
+import { uploadFile } from "@/api/upload.api.ts";
+import type { Car, CarCategory } from "@/types/index.ts";
 import { Button } from "@/components/ui/button.tsx";
 import { Input } from "@/components/ui/input.tsx";
 import { Label } from "@/components/ui/label.tsx";
 import { Badge } from "@/components/ui/badge.tsx";
-import { Card, CardContent } from "@/components/ui/card.tsx";
-import { Skeleton } from "@/components/ui/skeleton.tsx";
+import { AdminDataTable, type AdminTableColumn } from "@/components/admin-data-table.tsx";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog.tsx";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select.tsx";
 import { Switch } from "@/components/ui/switch.tsx";
+import { getApiErrorMessage } from "@/api/client.ts";
+import { patchOptionalNumber, patchStringList, patchText } from "@/lib/patchPayload.ts";
 import { toast } from "sonner";
-import { Plus, Pencil, Trash2, Car, Upload, X, ImageIcon } from "lucide-react";
+import { Plus, Pencil, Trash2, Car as CarIcon, Upload, X, ImageIcon, CalendarDays } from "lucide-react";
+import { Hint } from "@/components/ui/tooltip.tsx";
+import { useAuth } from "@/hooks/use-auth.ts";
+import { canDeleteRecords } from "@/lib/roles.ts";
+import { formatCarName } from "@/lib/displayName.ts";
+import { resolveMediaUrl } from "@/lib/mediaUrl.ts";
+import {
+  VEHICLE_TYPE_FILTER_OPTIONS,
+  formatVehicleCategoryLabel,
+  type DisplayVehicleCategory,
+} from "@/lib/vehicleCategories.ts";
 
-type CarCategory = "economy" | "compact" | "sedan" | "suv" | "luxury" | "sports" | "van";
-type Transmission = "automatic" | "manual";
-type FuelType = "gasoline" | "diesel" | "electric" | "hybrid";
+type Transmission = Car["transmission"];
+type FuelType = Car["fuelType"];
 
 interface CarForm {
   make: string; model: string; year: string; category: CarCategory;
-  color: string; licensePlate: string; dailyRate: string;
+  color: string; licensePlate: string; vin: string; dailyRate: string;
+  dailyMileageLimit: string; chargePerExtraKm: string;
   seats: string; transmission: Transmission; fuelType: FuelType;
-  locationId: string; mileage: string; description: string;
+  mileage: string; description: string;
   features: string;
 }
 
 const EMPTY_FORM: CarForm = {
   make: "", model: "", year: "", category: "sedan",
-  color: "", licensePlate: "", dailyRate: "",
+  color: "", licensePlate: "", vin: "", dailyRate: "",
+  dailyMileageLimit: "", chargePerExtraKm: "",
   seats: "5", transmission: "automatic", fuelType: "gasoline",
-  locationId: "", mileage: "", description: "",
+  mileage: "", description: "",
   features: "",
 };
 
@@ -44,33 +58,34 @@ const CAR_IMAGES: Record<string, string> = {
   van: "https://images.unsplash.com/photo-1701918190763-3851cf361f96?w=200&q=70",
 };
 
-async function uploadFile(
-  generateUploadUrl: () => Promise<string>,
-  file: File
-): Promise<Id<"_storage">> {
-  const uploadUrl = await generateUploadUrl();
-  const result = await fetch(uploadUrl, {
-    method: "POST",
-    headers: { "Content-Type": file.type },
-    body: file,
-  });
-  const { storageId } = await result.json() as { storageId: Id<"_storage"> };
-  return storageId;
-}
-
 export default function AdminCarsPage() {
-  const cars = useQuery(api.cars.list, {});
-  const locations = useQuery(api.locations.list, {});
-  const generateUploadUrl = useMutation(api.cars.generateUploadUrl);
-  const createCar = useMutation(api.cars.create);
-  const updateCar = useMutation(api.cars.update);
-  const removeCar = useMutation(api.cars.remove);
+  const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  const { user } = useAuth();
+  const canDelete = canDeleteRecords(user?.role);
+  const { data: cars, isLoading: carsLoading } = useQuery({
+    queryKey: ["cars"],
+    queryFn: () => carsApi.list(),
+  });
+  const createCar = useMutation({
+    mutationFn: carsApi.create,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["cars"] }),
+  });
+  const updateCar = useMutation({
+    mutationFn: ({ carId, data }: { carId: string; data: Partial<Car> }) => carsApi.update(carId, data),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["cars"] }),
+  });
+  const removeCar = useMutation({
+    mutationFn: carsApi.remove,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["cars"] }),
+  });
 
   const [open, setOpen] = useState(false);
-  const [editId, setEditId] = useState<Id<"cars"> | null>(null);
+  const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState<CarForm>(EMPTY_FORM);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState<"all" | DisplayVehicleCategory>("all");
 
   // Image upload state
   const [mainImage, setMainImage] = useState<File | null>(null);
@@ -78,21 +93,25 @@ export default function AdminCarsPage() {
   const [additionalImages, setAdditionalImages] = useState<File[]>([]);
   const [additionalPreviews, setAdditionalPreviews] = useState<string[]>([]);
   // Existing storage IDs when editing
-  const [existingStorageIds, setExistingStorageIds] = useState<Id<"_storage">[]>([]);
+  const [existingImageUrls, setExistingImageUrls] = useState<string[]>([]);
 
   const mainImageRef = useRef<HTMLInputElement>(null);
   const additionalImagesRef = useRef<HTMLInputElement>(null);
 
-  const filtered = (cars ?? []).filter((c) =>
-    `${c.make} ${c.model} ${c.licensePlate}`.toLowerCase().includes(search.toLowerCase())
-  );
+  const filtered = (cars ?? []).filter((c) => {
+    const matchesSearch = `${c.make} ${c.model} ${c.licensePlate}`
+      .toLowerCase()
+      .includes(search.toLowerCase());
+    const matchesCategory = categoryFilter === "all" || c.category === categoryFilter;
+    return matchesSearch && matchesCategory;
+  });
 
   const resetImageState = () => {
     setMainImage(null);
     setMainImagePreview("");
     setAdditionalImages([]);
     setAdditionalPreviews([]);
-    setExistingStorageIds([]);
+    setExistingImageUrls([]);
     if (mainImageRef.current) mainImageRef.current.value = "";
     if (additionalImagesRef.current) additionalImagesRef.current.value = "";
   };
@@ -104,26 +123,30 @@ export default function AdminCarsPage() {
     setOpen(true);
   };
 
-  const openEdit = (car: typeof cars extends (infer T)[] | undefined ? T : never) => {
+  const openEdit = (car: Car) => {
     if (!car) return;
     setForm({
       make: car.make, model: car.model, year: String(car.year), category: car.category,
-      color: car.color, licensePlate: car.licensePlate, dailyRate: String(car.dailyRate),
+      color: car.color, licensePlate: car.licensePlate ?? "", vin: car.vin ?? "", dailyRate: String(car.dailyRate),
+      dailyMileageLimit: car.dailyMileageLimit != null ? String(car.dailyMileageLimit) : "",
+      chargePerExtraKm: car.chargePerExtraKm != null ? String(car.chargePerExtraKm) : "",
       seats: String(car.seats), transmission: car.transmission, fuelType: car.fuelType,
-      locationId: car.locationId, mileage: car.mileage ? String(car.mileage) : "",
+      mileage: car.mileage ? String(car.mileage) : "",
       description: car.description ?? "",
       features: car.features?.join(", ") ?? "",
     });
     resetImageState();
     // Load existing images for preview
     if (car.resolvedImageUrls && car.resolvedImageUrls.length > 0) {
-      setMainImagePreview(car.resolvedImageUrls[0]);
-      setAdditionalPreviews(car.resolvedImageUrls.slice(1));
+      setMainImagePreview(resolveMediaUrl(car.resolvedImageUrls[0]));
+      setAdditionalPreviews(car.resolvedImageUrls.slice(1).map((url) => resolveMediaUrl(url)));
     } else if (car.imageUrl) {
-      setMainImagePreview(car.imageUrl);
+      setMainImagePreview(resolveMediaUrl(car.imageUrl));
     }
-    if (car.imageStorageIds) {
-      setExistingStorageIds(car.imageStorageIds);
+    if (car.imageUrls && car.imageUrls.length > 0) {
+      setExistingImageUrls(car.imageUrls);
+    } else if (car.resolvedImageUrls && car.resolvedImageUrls.length > 0) {
+      setExistingImageUrls(car.resolvedImageUrls);
     }
     setEditId(car._id);
     setOpen(true);
@@ -143,74 +166,169 @@ export default function AdminCarsPage() {
   };
 
   const handleSave = async () => {
-    if (!form.make || !form.model || !form.year || !form.dailyRate || !form.locationId) {
+    if (!form.make || !form.model || !form.year || !form.dailyRate || !form.vin.trim()) {
       toast.error("Please fill in all required fields");
       return;
     }
     setLoading(true);
     try {
       // Upload new images if selected
-      let storageIds: Id<"_storage">[] = [...existingStorageIds];
+      let imageUrls: string[] = [...existingImageUrls];
 
-      if (mainImage) {
-        // Replace main image: upload new one at front
-        const newId = await uploadFile(generateUploadUrl, mainImage);
-        storageIds = [newId, ...storageIds.slice(1)];
-      }
-
-      if (additionalImages.length > 0) {
-        const additionalIds = await Promise.all(
-          additionalImages.map((f) => uploadFile(generateUploadUrl, f))
-        );
-        // Keep main (index 0) and append new additional
-        storageIds = [storageIds[0], ...additionalIds].filter(Boolean);
+      if (mainImage || additionalImages.length > 0) {
+        const [mainUrl, ...additionalUrls] = await Promise.all([
+          mainImage ? uploadFile(mainImage, "cars") : Promise.resolve(null),
+          ...additionalImages.map((f) => uploadFile(f, "cars")),
+        ]);
+        if (mainUrl) {
+          imageUrls = [mainUrl, ...imageUrls.slice(1)];
+        }
+        if (additionalImages.length > 0) {
+          imageUrls = [imageUrls[0], ...additionalUrls].filter(Boolean);
+        }
       }
 
       const payload = {
         make: form.make, model: form.model, year: Number(form.year),
         category: form.category, color: form.color, licensePlate: form.licensePlate,
+        vin: form.vin.trim(),
         dailyRate: Number(form.dailyRate), seats: Number(form.seats),
+        dailyMileageLimit: patchOptionalNumber(form.dailyMileageLimit),
+        chargePerExtraKm: patchOptionalNumber(form.chargePerExtraKm),
         transmission: form.transmission, fuelType: form.fuelType,
-        locationId: form.locationId as Id<"locations">,
-        mileage: form.mileage ? Number(form.mileage) : undefined,
-        description: form.description || undefined,
-        features: form.features ? form.features.split(",").map((f) => f.trim()).filter(Boolean) : undefined,
-        imageStorageIds: storageIds.length > 0 ? storageIds : undefined,
+        mileage: patchOptionalNumber(form.mileage),
+        description: patchText(form.description),
+        features: patchStringList(form.features),
+        imageUrls,
       };
 
       if (editId) {
-        await updateCar({ carId: editId, ...payload });
+        await updateCar.mutateAsync({ carId: editId, data: payload });
         toast.success("Car updated");
       } else {
-        await createCar(payload);
+        await createCar.mutateAsync(payload as Parameters<typeof carsApi.create>[0]);
         toast.success("Car added");
       }
       setOpen(false);
     } catch (err) {
       console.error(err);
-      toast.error("Failed to save car");
+      toast.error(getApiErrorMessage(err));
     } finally {
       setLoading(false);
     }
   };
 
-  const handleDelete = async (carId: Id<"cars">) => {
+  const handleDelete = async (carId: string) => {
     if (!confirm("Delete this car?")) return;
     try {
-      await removeCar({ carId });
+      await removeCar.mutateAsync(carId);
       toast.success("Car deleted");
     } catch {
       toast.error("Failed to delete car");
     }
   };
 
-  const handleToggleAvailable = async (carId: Id<"cars">, current: boolean) => {
-    await updateCar({ carId, isAvailable: !current });
+  const handleToggleAvailable = async (carId: string, current: boolean) => {
+    await updateCar.mutateAsync({ carId, data: { isAvailable: !current } });
     toast.success(`Car ${!current ? "enabled" : "disabled"}`);
   };
 
   const f = (k: keyof CarForm) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
     setForm((p) => ({ ...p, [k]: e.target.value }));
+
+  const carColumns: AdminTableColumn<Car>[] = [
+    {
+      id: "vehicle",
+      header: "Vehicle",
+      cell: (car) => {
+        const imgSrc = (car.resolvedImageUrls && car.resolvedImageUrls[0]) ?? car.imageUrl ?? CAR_IMAGES[car.category];
+        return (
+          <div className="flex items-center gap-3 min-w-[180px]">
+            <img
+              src={resolveMediaUrl(imgSrc ?? CAR_IMAGES.sedan)}
+              alt={formatCarName(car, { includeYear: false })}
+              className="w-14 h-10 object-cover rounded-md shrink-0"
+            />
+            <div className="min-w-0">
+              <p className="font-medium truncate">{formatCarName(car)}</p>
+              <p className="text-xs text-muted-foreground capitalize">{car.color} · {car.transmission}</p>
+            </div>
+          </div>
+        );
+      },
+    },
+    {
+      id: "category",
+      header: "Category",
+      className: "hidden sm:table-cell",
+      headClassName: "hidden sm:table-cell",
+      cell: (car) => <Badge className="text-[10px] capitalize">{car.category}</Badge>,
+    },
+    {
+      id: "plate",
+      header: "Plate",
+      className: "hidden md:table-cell",
+      headClassName: "hidden md:table-cell",
+      cell: (car) => <span className="font-mono text-xs">{car.licensePlate}</span>,
+    },
+    {
+      id: "rate",
+      header: "Rate",
+      cell: (car) => <span className="font-semibold text-primary">${car.dailyRate}/day</span>,
+    },
+    {
+      id: "status",
+      header: "Status",
+      cell: (car) => (
+        <Badge className={car.isAvailable ? "bg-primary/20 text-primary border-primary/30 text-[10px]" : "bg-destructive/20 text-destructive border-destructive/30 text-[10px]"}>
+          {car.isAvailable ? "Available" : "Unavailable"}
+        </Badge>
+      ),
+    },
+    {
+      id: "available",
+      header: "Available",
+      className: "hidden lg:table-cell",
+      headClassName: "hidden lg:table-cell",
+      cell: (car) => (
+        <Switch
+          checked={car.isAvailable}
+          onCheckedChange={() => handleToggleAvailable(car._id, car.isAvailable)}
+          className="cursor-pointer"
+        />
+      ),
+    },
+    {
+      id: "actions",
+      header: "Actions",
+      className: "text-right",
+      headClassName: "text-right",
+      cell: (car) => (
+        <div className="flex items-center justify-end gap-1">
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 text-xs cursor-pointer"
+            onClick={() => navigate(`/admin/cars/${car._id}/bookings`)}
+          >
+            <CalendarDays className="h-3 w-3 mr-1" /> Bookings
+          </Button>
+          <Hint label="Edit car">
+            <Button variant="ghost" size="icon" onClick={() => openEdit(car)} className="cursor-pointer h-8 w-8" aria-label="Edit car">
+              <Pencil className="h-4 w-4" />
+            </Button>
+          </Hint>
+          {canDelete && (
+          <Hint label="Delete car">
+            <Button variant="ghost" size="icon" onClick={() => handleDelete(car._id)} className="cursor-pointer h-8 w-8 text-destructive hover:text-destructive" aria-label="Delete car">
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          </Hint>
+          )}
+        </div>
+      ),
+    },
+  ];
 
   return (
     <div className="p-6 space-y-5">
@@ -224,82 +342,82 @@ export default function AdminCarsPage() {
         </Button>
       </div>
 
-      <Input
-        placeholder="Search by make, model, plate..."
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-        className="max-w-xs"
-      />
+      <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
+        <Input
+          placeholder="Search by make, model, plate..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="max-w-xs"
+        />
+        <Select
+          value={categoryFilter}
+          onValueChange={(value) => setCategoryFilter(value as "all" | DisplayVehicleCategory)}
+        >
+          <SelectTrigger className="w-full sm:w-40 cursor-pointer">
+            <SelectValue placeholder="Car type" />
+          </SelectTrigger>
+          <SelectContent>
+            {VEHICLE_TYPE_FILTER_OPTIONS.map((type) => (
+              <SelectItem key={type} value={type} className="cursor-pointer">
+                {type === "all" ? "All types" : formatVehicleCategoryLabel(type)}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
 
-      {cars === undefined ? (
-        <div className="space-y-3">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-20 w-full" />)}</div>
-      ) : filtered.length === 0 ? (
-        <div className="text-center py-16">
-          <Car className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
-          <p className="text-muted-foreground">No cars found</p>
-        </div>
+      {carsLoading ? (
+        <AdminDataTable columns={carColumns} data={[]} getRowKey={(c) => c._id} isLoading />
       ) : (
-        <div className="space-y-3">
-          {filtered.map((car) => {
-            const imgSrc = (car.resolvedImageUrls && car.resolvedImageUrls[0]) ?? car.imageUrl ?? CAR_IMAGES[car.category];
-            return (
-              <Card key={car._id} className="border-border/50 bg-card/60">
-                <CardContent className="p-4 flex items-center gap-4">
-                  <img
-                    src={imgSrc ?? CAR_IMAGES.sedan}
-                    alt={`${car.make} ${car.model}`}
-                    className="w-20 h-14 object-cover rounded-lg shrink-0"
-                  />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-semibold">{car.year} {car.make} {car.model}</span>
-                      <Badge className="text-[10px] capitalize">{car.category}</Badge>
-                      <Badge className={car.isAvailable ? "bg-primary/20 text-primary border-primary/30 text-[10px]" : "bg-destructive/20 text-destructive border-destructive/30 text-[10px]"}>
-                        {car.isAvailable ? "Available" : "Unavailable"}
-                      </Badge>
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-0.5">{car.color} · {car.transmission} · ${car.dailyRate}/day · {car.licensePlate}</p>
-                    {car.resolvedImageUrls && car.resolvedImageUrls.length > 0 && (
-                      <p className="text-[10px] text-muted-foreground mt-0.5">{car.resolvedImageUrls.length} image{car.resolvedImageUrls.length !== 1 ? "s" : ""} uploaded</p>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <Switch
-                      checked={car.isAvailable}
-                      onCheckedChange={() => handleToggleAvailable(car._id, car.isAvailable)}
-                      className="cursor-pointer"
-                    />
-                    <Button variant="ghost" size="icon" onClick={() => openEdit(car)} className="cursor-pointer">
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                    <Button variant="ghost" size="icon" onClick={() => handleDelete(car._id)} className="cursor-pointer text-destructive hover:text-destructive">
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })}
-        </div>
+        <AdminDataTable
+          columns={carColumns}
+          data={filtered}
+          getRowKey={(c) => c._id}
+          emptyIcon={CarIcon}
+          emptyMessage="No cars found"
+        />
       )}
 
       {/* Create/Edit Dialog */}
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-3xl sm:max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editId ? "Edit Car" : "Add New Car"}</DialogTitle>
           </DialogHeader>
           <div className="grid grid-cols-2 gap-3">
             {([["make", "Make *"], ["model", "Model *"], ["year", "Year *"], ["dailyRate", "Daily Rate ($) *"]] as const).map(([key, label]) => (
-              <div key={key} className="space-y-1">
+              <div key={key} className="min-w-0 space-y-1">
                 <Label className="text-xs">{label}</Label>
-                <Input value={form[key]} onChange={f(key)} placeholder={label.replace(" *", "")} />
+                <Input value={form[key]} onChange={f(key)} placeholder={label.replace(" *", "")} className="w-full" />
               </div>
             ))}
-            <div className="space-y-1">
+            <div className="min-w-0 space-y-1">
+              <Label className="text-xs">Daily Mileage Limit (km/day)</Label>
+              <Input
+                type="number"
+                min={0}
+                value={form.dailyMileageLimit}
+                onChange={f("dailyMileageLimit")}
+                placeholder="e.g. 100"
+                className="w-full"
+              />
+            </div>
+            <div className="min-w-0 space-y-1">
+              <Label className="text-xs">Charge per Extra Km ($)</Label>
+              <Input
+                type="number"
+                min={0}
+                step="0.01"
+                value={form.chargePerExtraKm}
+                onChange={f("chargePerExtraKm")}
+                placeholder="e.g. 0.50"
+                className="w-full"
+              />
+            </div>
+            <div className="min-w-0 space-y-1">
               <Label className="text-xs">Category</Label>
               <Select value={form.category} onValueChange={(v) => setForm((p) => ({ ...p, category: v as CarCategory }))}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {(["economy","compact","sedan","suv","luxury","sports","van"] as const).map((c) => (
                     <SelectItem key={c} value={c} className="capitalize">{c}</SelectItem>
@@ -307,20 +425,20 @@ export default function AdminCarsPage() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-1">
+            <div className="min-w-0 space-y-1">
               <Label className="text-xs">Transmission</Label>
               <Select value={form.transmission} onValueChange={(v) => setForm((p) => ({ ...p, transmission: v as Transmission }))}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="automatic">Automatic</SelectItem>
                   <SelectItem value="manual">Manual</SelectItem>
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-1">
+            <div className="min-w-0 space-y-1">
               <Label className="text-xs">Fuel Type</Label>
               <Select value={form.fuelType} onValueChange={(v) => setForm((p) => ({ ...p, fuelType: v as FuelType }))}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {(["gasoline","diesel","electric","hybrid"] as const).map((ft) => (
                     <SelectItem key={ft} value={ft} className="capitalize">{ft}</SelectItem>
@@ -328,21 +446,16 @@ export default function AdminCarsPage() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-1">
-              <Label className="text-xs">Location *</Label>
-              <Select value={form.locationId} onValueChange={(v) => setForm((p) => ({ ...p, locationId: v }))}>
-                <SelectTrigger><SelectValue placeholder="Select location" /></SelectTrigger>
-                <SelectContent>
-                  {(locations ?? []).map((loc) => (
-                    <SelectItem key={loc._id} value={loc._id}>{loc.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            {([["color", "Color"], ["licensePlate", "License Plate"], ["seats", "Seats"], ["mileage", "Mileage (km)"]] as const).map(([key, label]) => (
-              <div key={key} className="space-y-1">
+            {([["color", "Color"], ["licensePlate", "License Plate"], ["vin", "VIN *"], ["seats", "Seats"], ["mileage", "Mileage (km)"]] as const).map(([key, label]) => (
+              <div key={key} className="min-w-0 space-y-1">
                 <Label className="text-xs">{label}</Label>
-                <Input value={form[key]} onChange={f(key)} placeholder={label} />
+                <Input
+                  value={form[key]}
+                  onChange={f(key)}
+                  placeholder={label.replace(" *", "")}
+                  className="w-full"
+                  required={key === "vin"}
+                />
               </div>
             ))}
 

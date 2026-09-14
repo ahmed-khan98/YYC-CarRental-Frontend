@@ -1,5 +1,8 @@
-import { useQuery } from "convex/react";
-import { api } from "@/convex/_generated/api.js";
+import { useQuery } from "@tanstack/react-query";
+import { carsApi } from "@/api/cars.api.ts";
+import { bookingsApi } from "@/api/bookings.api.ts";
+import { usersApi } from "@/api/users.api.ts";
+import { locationsApi } from "@/api/locations.api.ts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card.tsx";
 import { Skeleton } from "@/components/ui/skeleton.tsx";
 import { motion } from "motion/react";
@@ -8,6 +11,7 @@ import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button.tsx";
 import { Badge } from "@/components/ui/badge.tsx";
 import { format } from "date-fns";
+import { formatCarName } from "@/lib/displayName.ts";
 
 const STATUS_COLORS: Record<string, string> = {
   pending: "bg-yellow-500/20 text-yellow-400 border-yellow-500/30",
@@ -19,10 +23,10 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 export default function AdminOverview() {
-  const cars = useQuery(api.cars.list, {});
-  const bookings = useQuery(api.bookings.adminList, {});
-  const users = useQuery(api.users.listUsers, {});
-  const locations = useQuery(api.locations.list, {});
+  const { data: cars } = useQuery({ queryKey: ["cars"], queryFn: () => carsApi.list() });
+  const { data: bookings } = useQuery({ queryKey: ["bookings", "admin"], queryFn: () => bookingsApi.adminList() });
+  const { data: users } = useQuery({ queryKey: ["users"], queryFn: () => usersApi.listUsers() });
+  const { data: locations } = useQuery({ queryKey: ["locations"], queryFn: () => locationsApi.list() });
 
   const stats = {
     totalCars: cars?.length ?? 0,
@@ -34,6 +38,7 @@ export default function AdminOverview() {
   };
 
   const recentBookings = (bookings ?? []).slice().sort((a, b) => b._creationTime - a._creationTime).slice(0, 5);
+  const carsById = new Map((cars ?? []).map((car) => [car._id, car]));
 
   return (
     <div className="p-6 space-y-6">
@@ -87,17 +92,25 @@ export default function AdminOverview() {
             ? Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-12 w-full" />)
             : recentBookings.length === 0
             ? <p className="text-muted-foreground text-sm text-center py-4">No bookings yet</p>
-            : recentBookings.map((b) => (
+            : recentBookings.map((b) => {
+                const car = carsById.get(b.carId);
+                const carName = car ? formatCarName(car) : "Unknown car";
+                return (
                 <div key={b._id} className="flex items-center justify-between p-2 rounded-lg hover:bg-secondary/50 transition-colors">
-                  <div>
-                    <p className="text-sm font-medium font-mono">{b._id.slice(-8)}</p>
-                    <p className="text-xs text-muted-foreground">{format(new Date(b.pickupDate), "MMM d")} — ${b.totalAmount}</p>
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium truncate">{carName}</p>
+                    <p className="text-xs text-muted-foreground truncate">
+                      {car?.licensePlate ? <span className="font-mono">{car.licensePlate}</span> : null}
+                      {car?.licensePlate ? " · " : ""}
+                      {format(new Date(b.pickupDate), "MMM d")} — ${b.totalAmount}
+                    </p>
                   </div>
-                  <Badge className={`text-xs border capitalize ${STATUS_COLORS[b.status] ?? ""}`}>
-                    {b.status.replace("_", " ")}
+                  <Badge className={`text-xs border capitalize shrink-0 ${STATUS_COLORS[b.status] ?? ""}`}>
+                    {b.status.replace(/_/g, " ")}
                   </Badge>
                 </div>
-              ))}
+                );
+              })}
         </CardContent>
       </Card>
     </div>

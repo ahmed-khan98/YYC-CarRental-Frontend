@@ -17,7 +17,7 @@ export default function AboutPage() {
               animate={{ opacity: 1, y: 0 }}
               className="text-4xl sm:text-5xl font-bold tracking-tight mb-4"
             >
-              About <span className="text-primary">YYCDrive</span>
+              About <span className="text-primary">YYC Car Rental</span>
             </motion.h1>
             <motion.p
               initial={{ opacity: 0, y: 20 }}
@@ -37,7 +37,7 @@ export default function AboutPage() {
               <motion.div initial={{ opacity: 0, x: -20 }} whileInView={{ opacity: 1, x: 0 }} transition={{ duration: 0.5 }} viewport={{ once: true }}>
                 <h2 className="text-2xl font-bold mb-4">Who We Are</h2>
                 <p className="text-muted-foreground leading-relaxed mb-4">
-                  YYCDrive was founded in Calgary, Alberta with a simple mission: make renting a premium vehicle as easy and transparent as possible. We believe every driver deserves access to quality vehicles without the hassle of hidden fees, confusing policies, or outdated booking systems.
+                  YYC Car Rental was founded in Calgary, Alberta with a simple mission: make renting a premium vehicle as easy and transparent as possible. We believe every driver deserves access to quality vehicles without the hassle of hidden fees, confusing policies, or outdated booking systems.
                 </p>
                 <p className="text-muted-foreground leading-relaxed">
                   From economy compacts to luxury SUVs, our diverse fleet is meticulously maintained to ensure every drive is safe, comfortable, and enjoyable. Whether you're visiting the Rockies, heading to a business meeting, or just need a reliable ride while your car is in the shop — we've got you covered.
@@ -121,13 +121,13 @@ export default function AboutPage() {
         {/* Why Choose Us */}
         <section className="py-12 px-4 bg-card/30 border-t border-border/30">
           <div className="mx-auto max-w-4xl">
-            <h2 className="text-2xl font-bold mb-8 text-center">Why Choose YYCDrive?</h2>
+            <h2 className="text-2xl font-bold mb-8 text-center">Why Choose YYC Car Rental?</h2>
             <div className="grid sm:grid-cols-2 gap-5">
               {[
                 { title: "No Hidden Fees", desc: "Transparent pricing. What you see is what you pay — always." },
                 { title: "Premium Fleet", desc: "Every vehicle is regularly inspected, cleaned, and maintained to the highest standards." },
                 { title: "Flexible Locations", desc: "Multiple pickup and drop-off locations across Calgary for your convenience." },
-                { title: "Easy Booking", desc: "Book in minutes online. Modify or cancel up to 24 hours before pickup, hassle-free." },
+                { title: "Easy Booking", desc: "Book in minutes online. Cancel 72+ hours before pick-up with a 1-day fee, or review our policy for late cancellations." },
                 { title: "Photo Documentation", desc: "Vehicle condition photos at check-in and check-out protect both you and us." },
                 { title: "Dedicated Support", desc: "Our team is always ready to assist you before, during, and after your rental." },
               ].map((item, i) => (

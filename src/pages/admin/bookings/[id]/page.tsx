@@ -1,18 +1,43 @@
 import { useParams, useNavigate } from "react-router-dom";
-import { useQuery } from "convex/react";
-import { api } from "@/convex/_generated/api.js";
-import type { Id } from "@/convex/_generated/dataModel.d.ts";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
+import { bookingsApi } from "@/api/bookings.api.ts";
+import { inspectionsApi } from "@/api/inspections.api.ts";
 import { motion } from "motion/react";
 import { format } from "date-fns";
+import { formatRentalDays } from "@/lib/rentalPricing.ts";
+import { calculateServiceCharge, formatServiceRateLabel } from "@/lib/serviceCharge.ts";
+import { formatDateAtTime } from "@/lib/timeFormat.ts";
+import { BookingActorValue } from "@/components/booking-actor-value.tsx";
+import { AdminEditBookingDialog } from "@/components/admin-edit-booking-dialog.tsx";
+import { BookingBillPanel } from "@/components/booking-bill-panel.tsx";
+import { AdminManualChargesPanel } from "@/components/admin-manual-charges-panel.tsx";
+import { AdminSecurityDepositPanel } from "@/components/admin-security-deposit-panel.tsx";
+import { AdminInvoicesPanel } from "@/components/admin-invoices-panel.tsx";
+import { computeBillSummary } from "@/lib/billing.ts";
+import { CancelledAmountDueBanner } from "@/components/cancelled-amount-due.tsx";
+import { InspectionHistoryGrid, pickLatestInspection } from "@/components/inspection-history-grid.tsx";
+import { BookingStatusStepper } from "@/components/booking-status-stepper.tsx";
+import {
+  AdminCheckInOutActions,
+} from "@/components/check-in-out.tsx";
+import { isExtraDriverService } from "@/lib/extraDriver.ts";
+import { formatDisplayName } from "@/lib/displayName.ts";
 import { Badge } from "@/components/ui/badge.tsx";
 import { Button } from "@/components/ui/button.tsx";
-import { Card, CardContent, CardHeader } from "@/components/ui/card.tsx";
+import {
+  BookingDetailCard,
+  BookingDetailCardContent,
+  BookingDetailCardHeader,
+  BookingVehicleCard,
+  InfoRow,
+  SectionTitle,
+} from "@/components/booking-detail-ui.tsx";
 import { Skeleton } from "@/components/ui/skeleton.tsx";
 import {
-  ArrowLeft, MapPin, Calendar, Car, Receipt, Package,
-  LogIn, LogOut, Gauge, Fuel, FileText, Camera,
-  User, Mail, Phone, Clock, AlertCircle, CheckCircle,
-  XCircle, Info
+  ArrowLeft, MapPin, Calendar, Car, Package,
+  LogIn, LogOut, User, Mail, Phone, Clock, AlertCircle, CheckCircle,
+  XCircle, Info, Pencil
 } from "lucide-react";
 
 const STATUS_COLORS: Record<string, string> = {
@@ -33,11 +58,6 @@ const STATUS_ICONS: Record<string, React.ReactNode> = {
   cancelled: <XCircle className="h-4 w-4" />,
 };
 
-const FUEL_LABELS: Record<string, string> = {
-  empty: "Empty", quarter: "1/4 Tank", half: "1/2 Tank",
-  three_quarter: "3/4 Tank", full: "Full Tank",
-};
-
 const CAR_IMAGES: Record<string, string> = {
   economy: "https://images.unsplash.com/photo-1690278289651-895463644114?w=800&q=80",
   sedan: "https://images.unsplash.com/photo-1679891647402-330589ea9309?w=800&q=80",
@@ -48,44 +68,29 @@ const CAR_IMAGES: Record<string, string> = {
   van: "https://images.unsplash.com/photo-1701918190763-3851cf361f96?w=800&q=80",
 };
 
-function SectionTitle({ icon, title }: { icon: React.ReactNode; title: string }) {
-  return (
-    <div className="flex items-center gap-2 mb-4">
-      <div className="p-1.5 bg-primary/10 rounded-lg text-primary">{icon}</div>
-      <h2 className="font-semibold text-base">{title}</h2>
-    </div>
-  );
-}
-
-function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
-  return (
-    <div className="flex justify-between items-start gap-4 py-2.5 border-b border-border/30 last:border-0">
-      <span className="text-sm text-muted-foreground shrink-0">{label}</span>
-      <span className="text-sm font-medium text-right">{value}</span>
-    </div>
-  );
-}
-
 export default function AdminBookingDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const [editOpen, setEditOpen] = useState(false);
 
-  const detail = useQuery(
-    api.bookings.getDetailById,
-    id ? { bookingId: id as Id<"bookings"> } : "skip"
-  );
-  const inspections = useQuery(
-    api.inspections.listByBooking,
-    id ? { bookingId: id as Id<"bookings"> } : "skip"
-  );
-  const allUsers = useQuery(api.users.listUsers, {});
+  const { data: detail, isLoading: detailLoading } = useQuery({
+    queryKey: ["bookings", id, "detail"],
+    queryFn: () => bookingsApi.getDetailById(id!),
+    enabled: !!id,
+  });
+  const { data: inspections, isLoading: inspectionsLoading } = useQuery({
+    queryKey: ["inspections", id],
+    queryFn: () => inspectionsApi.listByBooking(id!),
+    enabled: !!id,
+  });
 
   if (!id) {
     navigate("/admin/bookings");
     return null;
   }
 
-  if (detail === undefined || inspections === undefined) {
+  if (detailLoading || inspectionsLoading) {
     return (
       <div className="p-6 space-y-4">
         <Skeleton className="h-8 w-40" />
@@ -110,79 +115,90 @@ export default function AdminBookingDetailPage() {
     );
   }
 
-  const { booking, car, pickupLocation, dropoffLocation, services, days, baseAmount, servicesAmount } = detail;
-  const taxRate = 0.1;
-  const taxAmount = (baseAmount + servicesAmount) * taxRate;
-  const totalWithTax = baseAmount + servicesAmount + taxAmount;
+  const {
+    booking,
+    car,
+    pickupLocation,
+    dropoffLocation,
+    services,
+    days,
+    baseAmount,
+    servicesAmount,
+    extraMileageCharge = 0,
+    extraMileageKm,
+    user: customer,
+    createdBy,
+    updatedBy,
+    checkInPerformedBy,
+    checkOutPerformedBy,
+    billEntries = [],
+    billSummary,
+    securityDeposit,
+  } = detail;
+  const resolvedBillSummary = billSummary ?? computeBillSummary(billEntries);
 
   const carImg = car?.resolvedImageUrls?.[0] ?? (car ? CAR_IMAGES[car.category] : undefined);
-  const checkIn = inspections?.find((i) => i.type === "check_in");
-  const checkOut = inspections?.find((i) => i.type === "check_out");
-
-  // Find full user profile from admin listUsers (includes phone)
-  const customer = allUsers?.find((u) => u._id === booking.userId);
+  const checkIn = pickLatestInspection(inspections, "check_in");
+  const checkOut = pickLatestInspection(inspections, "check_out");
+  const hasExtraDriver = services.some(isExtraDriverService);
+  const extraDriverNames = booking.extraDriverNames ?? [];
 
   return (
-    <div className="p-6 max-w-4xl">
-      {/* Header */}
+    <div className="p-4 sm:p-6 max-w-6xl pb-16 md:pb-12 overflow-x-hidden">
       <motion.div
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
-        className="flex items-center gap-3 mb-6"
+        className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3 mb-4 sm:mb-3"
       >
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => navigate("/admin/bookings")}
-          className="cursor-pointer -ml-2"
-        >
-          <ArrowLeft className="h-4 w-4 mr-1" /> Bookings
-        </Button>
-        <span className="text-muted-foreground text-sm font-mono">#{booking._id.slice(-8).toUpperCase()}</span>
-        <div className="flex-1" />
-        <Badge className={`text-xs border flex items-center gap-1.5 capitalize ${STATUS_COLORS[booking.status] ?? ""}`}>
-          {STATUS_ICONS[booking.status]}
-          {booking.status.replace(/_/g, " ")}
-        </Badge>
+        <div className="flex items-center gap-2 min-w-0">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => navigate("/admin/bookings")}
+            className="cursor-pointer -ml-2 shrink-0"
+          >
+            <ArrowLeft className="h-4 w-4 mr-1" /> Bookings
+          </Button>
+          <span className="text-muted-foreground text-sm font-mono truncate">
+            #{booking._id.slice(-8).toUpperCase()}
+          </span>
+        </div>
+        <div className="flex items-center gap-2 sm:ml-auto shrink-0">
+          {booking.status !== "cancelled" && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setEditOpen(true)}
+              className="cursor-pointer h-8"
+            >
+              <Pencil className="h-3.5 w-3.5 mr-1.5" />
+              Edit Booking
+            </Button>
+          )}
+          <Badge className={`text-xs border flex items-center gap-1.5 capitalize h-8 px-2.5 ${STATUS_COLORS[booking.status] ?? ""}`}>
+            {STATUS_ICONS[booking.status]}
+            {booking.status.replace(/_/g, " ")}
+          </Badge>
+        </div>
       </motion.div>
 
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.05 }}
-        className="space-y-4"
+        className="space-y-6 md:space-y-5"
       >
-        {/* Car Hero */}
-        <Card className="border-border/50 bg-card/60 overflow-hidden pt-0">
-          {carImg && (
-            <div className="relative h-48 sm:h-56 w-full overflow-hidden">
-              <img src={carImg} alt={car ? `${car.make} ${car.model}` : "Car"} className="w-full h-full object-cover" />
-              <div className="absolute inset-0 bg-gradient-to-t from-background/80 to-transparent" />
-              <div className="absolute bottom-4 left-4 right-4">
-                <h1 className="text-xl sm:text-2xl font-bold text-white drop-shadow">
-                  {car ? `${car.year} ${car.make} ${car.model}` : "Vehicle"}
-                </h1>
-                {car && (
-                  <p className="text-sm text-white/70 capitalize mt-0.5">
-                    {car.category} · {car.transmission} · {car.seats} seats · <span className="text-primary font-medium">${car.dailyRate}/day</span>
-                  </p>
-                )}
-              </div>
-            </div>
-          )}
-          {/* Extra car images */}
-          {car?.resolvedImageUrls && car.resolvedImageUrls.length > 1 && (
-            <div className="flex gap-2 p-3 overflow-x-auto">
-              {car.resolvedImageUrls.slice(1).map((url, i) => (
-                <a key={i} href={url} target="_blank" rel="noopener noreferrer">
-                  <img src={url} alt={`Car photo ${i + 2}`} className="h-16 w-24 object-cover rounded-lg shrink-0 hover:opacity-80 transition-opacity cursor-pointer border border-border/30" />
-                </a>
-              ))}
-            </div>
-          )}
-        </Card>
+        {car && (
+          <BookingVehicleCard
+            car={car}
+            imageUrl={carImg}
+          />
+        )}
 
-        {/* Cancellation notice */}
+        {booking.status !== "cancelled" && (
+          <BookingStatusStepper status={booking.status} />
+        )}
+
         {booking.status === "cancelled" && (
           <div className={`rounded-xl border px-4 py-3 text-sm flex items-start gap-2 ${
             booking.cancelledBy === "admin"
@@ -193,57 +209,88 @@ export default function AdminBookingDetailPage() {
             {booking.cancelledBy === "admin" && booking.cancellationReason
               ? <span><strong>Cancelled by admin:</strong> {booking.cancellationReason}</span>
               : booking.cancelledBy === "user"
-              ? <span>Cancelled by customer.</span>
+              ? <span>
+                  Cancelled by customer.
+                  {booking.cancellationPolicy === "one_day_fee" && " 1-day cancellation fee applies."}
+                  {booking.cancellationPolicy === "non_refundable" && " Full booking amount applies (within 72 hours of pick-up)."}
+                </span>
               : <span>This booking was cancelled.</span>}
           </div>
         )}
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* Customer Info */}
-          <Card className="border-border/50 bg-card/60">
-            <CardHeader className="pb-2 pt-5 px-5">
-              <SectionTitle icon={<User className="h-4 w-4" />} title="Customer Information" />
-            </CardHeader>
-            <CardContent className="px-5 pb-5 pt-0">
-              {customer ? (
-                <>
-                  <InfoRow label="Full Name" value={customer.name ?? "—"} />
-                  <InfoRow
-                    label="Email"
-                    value={
-                      <span className="flex items-center gap-1 justify-end">
-                        <Mail className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                        {customer.email ?? "—"}
-                      </span>
-                    }
-                  />
-                  <InfoRow
-                    label="Phone"
-                    value={
-                      <span className="flex items-center gap-1 justify-end">
-                        <Phone className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                        {customer.phone ?? "—"}
-                      </span>
-                    }
-                  />
-                </>
-              ) : (
-                <div className="space-y-2">
-                  <Skeleton className="h-8 w-full" />
-                  <Skeleton className="h-8 w-full" />
-                  <Skeleton className="h-8 w-full" />
-                </div>
-              )}
-            </CardContent>
-          </Card>
+        {booking.status === "cancelled" && (
+          <CancelledAmountDueBanner
+            booking={booking}
+            balanceDue={resolvedBillSummary.totalUnpaid}
+          />
+        )}
 
-          {/* Booking Details */}
-          <Card className="border-border/50 bg-card/60">
-            <CardHeader className="pb-2 pt-5 px-5">
+        {/* Row 1: Customer + Booking Details + Billing (sticky on desktop) */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 md:gap-4 items-start">
+          <BookingDetailCard>
+            <BookingDetailCardHeader>
+              <SectionTitle icon={<User className="h-4 w-4" />} title="Customer Information" />
+            </BookingDetailCardHeader>
+            <BookingDetailCardContent>
+              <InfoRow label="Full Name" value={formatDisplayName(customer?.name)} />
+              <InfoRow
+                label="Email"
+                value={
+                  <span className="flex items-center gap-1 justify-end">
+                    <Mail className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                    {customer?.email ?? "—"}
+                  </span>
+                }
+              />
+              <InfoRow
+                label="Phone"
+                value={
+                  <span className="flex items-center gap-1 justify-end">
+                    <Phone className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                    {customer?.phone ?? "—"}
+                  </span>
+                }
+              />
+            </BookingDetailCardContent>
+          </BookingDetailCard>
+
+          <BookingDetailCard>
+            <BookingDetailCardHeader>
               <SectionTitle icon={<Info className="h-4 w-4" />} title="Booking Details" />
-            </CardHeader>
-            <CardContent className="px-5 pb-5 pt-0">
-              <InfoRow label="Created" value={format(new Date(booking._creationTime), "MMM d, yyyy")} />
+            </BookingDetailCardHeader>
+            <BookingDetailCardContent>
+              <InfoRow
+                label="Created by"
+                value={<BookingActorValue actor={createdBy} timestamp={booking._creationTime} />}
+              />
+              {updatedBy && (
+                <InfoRow
+                  label="Updated by"
+                  value={<BookingActorValue actor={updatedBy} timestamp={booking._updatedTime} />}
+                />
+              )}
+              {checkInPerformedBy && (
+                <InfoRow
+                  label="Checked in by"
+                  value={
+                    <BookingActorValue
+                      actor={checkInPerformedBy}
+                      timestamp={checkIn?._creationTime}
+                    />
+                  }
+                />
+              )}
+              {checkOutPerformedBy && (
+                <InfoRow
+                  label="Checked out by"
+                  value={
+                    <BookingActorValue
+                      actor={checkOutPerformedBy}
+                      timestamp={checkOut?._creationTime}
+                    />
+                  }
+                />
+              )}
               <InfoRow
                 label="Pickup Location"
                 value={
@@ -267,8 +314,7 @@ export default function AdminBookingDetailPage() {
                 value={
                   <span className="flex items-center gap-1 justify-end">
                     <Calendar className="h-3.5 w-3.5 text-primary shrink-0" />
-                    {format(new Date(booking.pickupDate), "MMM d, yyyy")}
-                    {booking.pickupTime && <span className="text-muted-foreground"> {booking.pickupTime}</span>}
+                    {formatDateAtTime(format(new Date(booking.pickupDate), "MMM d, yyyy"), booking.pickupTime)}
                   </span>
                 }
               />
@@ -277,167 +323,126 @@ export default function AdminBookingDetailPage() {
                 value={
                   <span className="flex items-center gap-1 justify-end">
                     <Calendar className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                    {format(new Date(booking.returnDate), "MMM d, yyyy")}
-                    {booking.returnTime && <span className="text-muted-foreground"> {booking.returnTime}</span>}
+                    {formatDateAtTime(format(new Date(booking.returnDate), "MMM d, yyyy"), booking.returnTime)}
                   </span>
                 }
               />
-              <InfoRow label="Duration" value={`${days} day${days !== 1 ? "s" : ""}`} />
+              <InfoRow label="Duration" value={formatRentalDays(days)} />
               {booking.notes && (
                 <InfoRow label="Notes" value={<span className="text-muted-foreground">{booking.notes}</span>} />
               )}
-            </CardContent>
-          </Card>
+            </BookingDetailCardContent>
+          </BookingDetailCard>
+
+          <div className="lg:sticky lg:top-6 self-start w-full">
+            <BookingBillPanel
+              billEntries={billEntries}
+              billSummary={resolvedBillSummary}
+              days={days}
+              baseAmount={baseAmount}
+              servicesAmount={servicesAmount}
+              serviceLines={services.map((svc) => ({
+                name: svc.quantity && svc.quantity > 1 ? `${svc.name} × ${svc.quantity}` : svc.name,
+                amount: calculateServiceCharge(svc, days, svc.quantity ?? 1),
+              }))}
+              extraMileageCharge={extraMileageCharge}
+              extraMileageKm={extraMileageKm ?? booking.extraMileageKm}
+              chargePerExtraKm={car?.chargePerExtraKm ?? booking.bookedChargePerExtraKm}
+              dailyRate={car?.dailyRate ?? booking.bookedDailyRate ?? 0}
+              isCancelled={booking.status === "cancelled"}
+            />
+          </div>
         </div>
 
-        {/* Billing */}
-        <Card className="border-border/50 bg-card/60">
-          <CardHeader className="pb-2 pt-5 px-5">
-            <SectionTitle icon={<Receipt className="h-4 w-4" />} title="Billing Summary" />
-          </CardHeader>
-          <CardContent className="px-5 pb-5 pt-0">
-            <div className="max-w-sm space-y-0">
-              <InfoRow
-                label={`Base Rate (${days}d × $${car?.dailyRate ?? 0}/day)`}
-                value={`$${baseAmount.toFixed(2)}`}
-              />
-              {services.length > 0 && (
-                <InfoRow
-                  label={`Add-on Services (${days}d)`}
-                  value={`$${servicesAmount.toFixed(2)}`}
-                />
-              )}
-              <InfoRow label="Tax (10%)" value={`$${taxAmount.toFixed(2)}`} />
-              <div className="flex justify-between items-center pt-3 mt-1">
-                <span className="font-semibold text-base">Total</span>
-                <span className="font-bold text-lg text-primary">${totalWithTax.toFixed(2)}</span>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Additional Services */}
-        {services.length > 0 && (
-          <Card className="border-border/50 bg-card/60">
-            <CardHeader className="pb-2 pt-5 px-5">
-              <SectionTitle icon={<Package className="h-4 w-4" />} title="Add-on Services" />
-            </CardHeader>
-            <CardContent className="px-5 pb-5 pt-0">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {services.map((svc) => (
-                  <div key={svc._id} className="flex items-center justify-between bg-muted/30 rounded-xl px-4 py-3 border border-border/30">
-                    <div>
-                      <p className="text-sm font-medium">{svc.name}</p>
-                      <p className="text-xs text-muted-foreground capitalize">{svc.category}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-sm font-semibold text-primary">${svc.dailyRate}/day</p>
-                      <p className="text-xs text-muted-foreground">${(svc.dailyRate * days).toFixed(2)} total</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Check-in / Check-out History */}
-        {inspections && inspections.length > 0 && (
-          <Card className="border-border/50 bg-card/60">
-            <CardHeader className="pb-2 pt-5 px-5">
-              <SectionTitle icon={<Car className="h-4 w-4" />} title="Check-in / Check-out History" />
-            </CardHeader>
-            <CardContent className="px-5 pb-5 pt-0 space-y-4">
-              {[checkIn, checkOut].filter(Boolean).map((insp) => {
-                if (!insp) return null;
-                const isCheckIn = insp.type === "check_in";
-                return (
-                  <div key={insp._id} className="rounded-xl border border-border/40 bg-muted/20 p-4 space-y-3">
-                    <div className="flex items-center gap-2">
-                      <div className={`p-1.5 rounded-lg ${isCheckIn ? "bg-primary/10 text-primary" : "bg-blue-500/10 text-blue-400"}`}>
-                        {isCheckIn ? <LogIn className="h-4 w-4" /> : <LogOut className="h-4 w-4" />}
-                      </div>
+        {/* Add-on Services */}
+        <BookingDetailCard>
+          <BookingDetailCardHeader>
+            <SectionTitle icon={<Package className="h-4 w-4" />} title="Add-on Services" />
+          </BookingDetailCardHeader>
+          <BookingDetailCardContent>
+            {services.length > 0 ? (
+              <>
+                <div className="grid grid-cols-1 gap-3">
+                  {services.map((svc) => (
+                    <div key={svc._id} className="flex items-center justify-between bg-muted/30 rounded-xl px-4 py-3 border border-border/30">
                       <div>
-                        <p className="font-semibold text-sm">{isCheckIn ? "Check-In (Pickup)" : "Check-Out (Return)"}</p>
+                        <p className="text-sm font-medium">{svc.name}</p>
+                        <p className="text-xs text-muted-foreground capitalize">
+                          {svc.category}
+                          {(svc.quantity ?? 1) > 1 ? ` · Qty ${svc.quantity}` : ""}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-sm font-semibold text-primary">{formatServiceRateLabel(svc)}</p>
                         <p className="text-xs text-muted-foreground">
-                          {format(new Date(insp._creationTime), "MMM d, yyyy 'at' h:mm a")}
+                          ${calculateServiceCharge(svc, days, svc.quantity ?? 1).toFixed(2)} total
                         </p>
                       </div>
                     </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="bg-background/50 rounded-lg px-3 py-2.5 border border-border/30">
-                        <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-0.5">
-                          <Gauge className="h-3 w-3" /> Mileage
-                        </div>
-                        <p className="text-sm font-semibold">{insp.mileage.toLocaleString()} km</p>
-                      </div>
-                      <div className="bg-background/50 rounded-lg px-3 py-2.5 border border-border/30">
-                        <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-0.5">
-                          <Fuel className="h-3 w-3" /> Fuel Level
-                        </div>
-                        <p className="text-sm font-semibold">{FUEL_LABELS[insp.fuelLevel] ?? insp.fuelLevel}</p>
-                      </div>
+                  ))}
+                </div>
+                {hasExtraDriver && extraDriverNames.length > 0 && (
+                  <div className="mt-4 pt-4 border-t border-border/40">
+                    <div className="flex items-center gap-2 mb-3">
+                      <User className="h-4 w-4 text-primary" />
+                      <p className="text-sm font-medium">
+                        Additional Drivers ({booking.extraDriverCount ?? extraDriverNames.length})
+                      </p>
                     </div>
-                    {insp.notes && (
-                      <div className="flex items-start gap-2 text-sm">
-                        <FileText className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
-                        <span className="text-muted-foreground">{insp.notes}</span>
-                      </div>
-                    )}
-                    {insp.resolvedImageUrls && insp.resolvedImageUrls.length > 0 && (
-                      <div className="space-y-2">
-                        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                          <Camera className="h-3.5 w-3.5" />
-                          <span>Condition Photos ({insp.resolvedImageUrls.length})</span>
+                    <div className="space-y-2">
+                      {extraDriverNames.map((name, index) => (
+                        <div
+                          key={`${name}-${index}`}
+                          className="rounded-lg border border-border/30 bg-muted/20 px-3 py-2 text-sm"
+                        >
+                          Driver {index + 1}: <span className="font-medium">{name}</span>
                         </div>
-                        <div className="flex gap-2 flex-wrap">
-                          {insp.resolvedImageUrls.map((url, i) => (
-                            <a key={i} href={url} target="_blank" rel="noopener noreferrer">
-                              <img
-                                src={url}
-                                alt={`Photo ${i + 1}`}
-                                className="h-20 w-28 object-cover rounded-lg hover:opacity-80 transition-opacity border border-border/30 cursor-pointer"
-                              />
-                            </a>
-                          ))}
-                        </div>
-                      </div>
-                    )}
+                      ))}
+                    </div>
                   </div>
-                );
-              })}
-            </CardContent>
-          </Card>
-        )}
+                )}
+              </>
+            ) : (
+              <p className="text-sm text-muted-foreground py-2">No add-on services on this booking.</p>
+            )}
+          </BookingDetailCardContent>
+        </BookingDetailCard>
 
-        {/* Vehicle Specs */}
-        {car && (
-          <Card className="border-border/50 bg-card/60">
-            <CardHeader className="pb-2 pt-5 px-5">
-              <SectionTitle icon={<Car className="h-4 w-4" />} title="Vehicle Specifications" />
-            </CardHeader>
-            <CardContent className="px-5 pb-5 pt-0">
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                {[
-                  { label: "Make", value: car.make },
-                  { label: "Model", value: car.model },
-                  { label: "Year", value: car.year },
-                  { label: "Category", value: car.category },
-                  { label: "Transmission", value: car.transmission },
-                  { label: "Seats", value: `${car.seats} seats` },
-                  { label: "Fuel Type", value: car.fuelType },
-                  { label: "Daily Rate", value: `$${car.dailyRate}/day` },
-                ].map((spec) => (
-                  <div key={spec.label} className="bg-muted/30 rounded-lg px-3 py-2.5 border border-border/30">
-                    <p className="text-xs text-muted-foreground mb-0.5">{spec.label}</p>
-                    <p className="text-sm font-medium capitalize">{spec.value}</p>
-                  </div>
-                ))}
+        <AdminSecurityDepositPanel bookingId={booking._id} deposit={securityDeposit} />
+        <AdminInvoicesPanel bookingId={booking._id} billEntries={billEntries} />
+        <AdminManualChargesPanel
+          bookingId={booking._id}
+          billEntries={billEntries}
+          securityDeposit={securityDeposit}
+        />
+
+        {(checkIn || checkOut || booking.status === "confirmed" || booking.status === "checked_in") && (
+          <BookingDetailCard>
+            <BookingDetailCardHeader>
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <SectionTitle icon={<Car className="h-4 w-4" />} title="Check-in / Check-out History" />
+                <AdminCheckInOutActions booking={booking} />
               </div>
-            </CardContent>
-          </Card>
+            </BookingDetailCardHeader>
+            <BookingDetailCardContent>
+              <InspectionHistoryGrid checkIn={checkIn} checkOut={checkOut} booking={booking} />
+            </BookingDetailCardContent>
+          </BookingDetailCard>
         )}
       </motion.div>
+
+      {editOpen && (
+        <AdminEditBookingDialog
+          booking={{ ...booking, billEntries: booking.billEntries ?? billEntries }}
+          customer={customer}
+          open={editOpen}
+          onOpenChange={setEditOpen}
+          onSuccess={() => {
+            queryClient.invalidateQueries({ queryKey: ["bookings", id, "detail"] });
+            queryClient.invalidateQueries({ queryKey: ["inspections", id] });
+          }}
+        />
+      )}
     </div>
   );
 }

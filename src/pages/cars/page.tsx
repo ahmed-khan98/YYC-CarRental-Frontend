@@ -1,7 +1,8 @@
-import { useState } from "react";
-import { useQuery } from "convex/react";
+import { memo, useCallback, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useSearchParams, useNavigate } from "react-router-dom";
-import { api } from "@/convex/_generated/api.js";
+import { carsApi } from "@/api/cars.api.ts";
+import { bookingsApi } from "@/api/bookings.api.ts";
 import Navbar from "@/components/navbar.tsx";
 import Footer from "@/components/footer.tsx";
 import { Button } from "@/components/ui/button.tsx";
@@ -9,14 +10,21 @@ import { Badge } from "@/components/ui/badge.tsx";
 import { Card, CardContent } from "@/components/ui/card.tsx";
 import { Skeleton } from "@/components/ui/skeleton.tsx";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select.tsx";
-import { Input } from "@/components/ui/input.tsx";
-import { Label } from "@/components/ui/label.tsx";
+import { DatePicker } from "@/components/date-picker.tsx";
 import { Slider } from "@/components/ui/slider.tsx";
-import { motion } from "motion/react";
-import { Users, Fuel, Gauge, SlidersHorizontal, X, Car, Calendar } from "lucide-react";
+import { Users, Fuel, Gauge, SlidersHorizontal, X, Car } from "lucide-react";
 import { format } from "date-fns";
+import {
+  formatVehicleCategoryLabel,
+  isCustomerVisibleVehicle,
+  normalizeVehicleTypeFilter,
+  vehicleCategoryBadgeClass,
+  VEHICLE_TYPE_FILTER_OPTIONS,
+} from "@/lib/vehicleCategories.ts";
+import { cn } from "@/lib/utils.ts";
+import { resolveMediaUrl } from "@/lib/mediaUrl.ts";
 
-const CATEGORIES = ["all", "economy", "compact", "sedan", "suv", "luxury", "sports", "van"] as const;
+const CATEGORIES = VEHICLE_TYPE_FILTER_OPTIONS;
 const TRANSMISSIONS = ["all", "automatic", "manual"] as const;
 const FUEL_TYPES = ["all", "gasoline", "diesel", "electric", "hybrid"] as const;
 
@@ -33,37 +41,191 @@ const CAR_IMAGES: Record<string, string> = {
 const today = format(new Date(), "yyyy-MM-dd");
 const tomorrow = format(new Date(Date.now() + 86400000), "yyyy-MM-dd");
 
+const browseDateFieldClass =
+  "h-10 min-h-10 rounded-md border border-input bg-background px-3 text-sm shadow-xs transition-colors hover:bg-accent/30 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50";
+
+const CarsFiltersPanel = memo(function CarsFiltersPanel({
+  transmission,
+  fuelType,
+  maxPrice,
+  hasFilters,
+  onTransmissionChange,
+  onFuelTypeChange,
+  onMaxPriceChange,
+  onClearFilters,
+}: {
+  transmission: string;
+  fuelType: string;
+  maxPrice: number[];
+  hasFilters: boolean;
+  onTransmissionChange: (value: string) => void;
+  onFuelTypeChange: (value: string) => void;
+  onMaxPriceChange: (value: number[]) => void;
+  onClearFilters: () => void;
+}) {
+  return (
+    <div className="mb-5 rounded-xl border border-border/50 bg-card px-4 pb-4 pt-2 sm:mb-6">
+      <div className="mb-3 flex min-h-8 items-center justify-between gap-3">
+        <h3 className="font-semibold text-sm">Filters</h3>
+        <button
+          type="button"
+          onClick={onClearFilters}
+          aria-hidden={!hasFilters}
+          tabIndex={hasFilters ? 0 : -1}
+          className={cn(
+            "flex shrink-0 cursor-pointer items-center gap-1 text-xs text-primary hover:underline",
+            !hasFilters && "pointer-events-none invisible",
+          )}
+        >
+          <X className="h-3 w-3" /> Clear all
+        </button>
+      </div>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <div className="min-w-0 space-y-2">
+          <label className="text-xs font-medium text-muted-foreground">Transmission</label>
+          <Select value={transmission} onValueChange={onTransmissionChange}>
+            <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {TRANSMISSIONS.map((t) => (
+                <SelectItem key={t} value={t} className="capitalize">{t}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="min-w-0 space-y-2">
+          <label className="text-xs font-medium text-muted-foreground">Fuel Type</label>
+          <Select value={fuelType} onValueChange={onFuelTypeChange}>
+            <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {FUEL_TYPES.map((f) => (
+                <SelectItem key={f} value={f} className="capitalize">{f}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="min-w-0 space-y-2">
+          <label className="text-xs font-medium text-muted-foreground">Max Price</label>
+          <div className="flex h-9 items-center">
+            <Slider min={20} max={500} step={10} value={maxPrice} onValueChange={onMaxPriceChange} className="w-full" />
+          </div>
+          <p className="text-[11px] text-muted-foreground">${maxPrice[0]}/day</p>
+        </div>
+      </div>
+    </div>
+  );
+});
+
+const CarListingCard = memo(function CarListingCard({
+  car,
+  onOpen,
+  onBook,
+}: {
+  car: NonNullable<Awaited<ReturnType<typeof carsApi.list>>>[number];
+  onOpen: (carId: string) => void;
+  onBook: () => void;
+}) {
+  const imgSrc =
+    (car.resolvedImageUrls && car.resolvedImageUrls[0])
+    ?? car.imageUrl
+    ?? CAR_IMAGES[car.category]
+    ?? CAR_IMAGES.sedan;
+
+  return (
+    <div className="transition-transform duration-300 hover:-translate-y-1">
+      <Card
+        className="group cursor-pointer overflow-hidden border-border/50 bg-card/60 transition-all duration-300 hover:border-primary/40"
+        onClick={() => onOpen(car._id)}
+      >
+        <div className="relative h-48 overflow-hidden">
+          <img
+            src={resolveMediaUrl(imgSrc)}
+            alt={`${car.make} ${car.model}`}
+            className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+          />
+          <div className="absolute top-3 left-3">
+            <Badge className={`text-xs capitalize ${vehicleCategoryBadgeClass(car.category)}`}>
+              {car.category}
+            </Badge>
+          </div>
+        </div>
+        <CardContent className="p-4">
+          <div className="mb-2 flex items-start justify-between">
+            <div>
+              <h3 className="font-semibold">{car.year} {car.make} {car.model}</h3>
+              <p className="text-xs capitalize text-muted-foreground">{car.color} · {car.transmission}</p>
+            </div>
+            <div className="shrink-0 text-right">
+              <span className="text-xl font-bold text-primary">${car.dailyRate}</span>
+              <span className="text-xs text-muted-foreground">/day</span>
+            </div>
+          </div>
+          <div className="mb-3 flex items-center gap-3 text-xs text-muted-foreground">
+            <span className="flex items-center gap-1"><Users className="h-3 w-3" />{car.seats} seats</span>
+            <span className="flex items-center gap-1"><Fuel className="h-3 w-3" />{car.fuelType}</span>
+            {car.mileage && (
+              <span className="flex items-center gap-1">
+                <Gauge className="h-3 w-3" />{car.mileage.toLocaleString()} km
+              </span>
+            )}
+          </div>
+          {car.features && car.features.length > 0 && (
+            <div className="mb-3 flex flex-wrap gap-1">
+              {car.features.slice(0, 3).map((f) => (
+                <span key={f} className="rounded-full bg-secondary px-2 py-0.5 text-[10px] text-secondary-foreground">
+                  {f}
+                </span>
+              ))}
+            </div>
+          )}
+          <Button
+            className="h-9 w-full cursor-pointer text-sm"
+            onClick={(e) => {
+              e.stopPropagation();
+              onBook();
+            }}
+          >
+            Book Now
+          </Button>
+        </CardContent>
+      </Card>
+    </div>
+  );
+});
+
 export default function CarsPage() {
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
 
-  const [category, setCategory] = useState(searchParams.get("category") ?? "all");
+  const [category, setCategory] = useState(() => normalizeVehicleTypeFilter(searchParams.get("category")));
   const [transmission, setTransmission] = useState("all");
   const [fuelType, setFuelType] = useState("all");
   const [maxPrice, setMaxPrice] = useState([500]);
   const [showFilters, setShowFilters] = useState(false);
   const [sortBy, setSortBy] = useState("default");
 
-  // Date-based availability
-  const [pickupDate, setPickupDate] = useState(searchParams.get("pickupDate") ?? today);
-  const [dropoffDate, setDropoffDate] = useState(searchParams.get("dropoffDate") ?? tomorrow);
+  // Date-based availability — only filter when dates are explicitly chosen
+  const [pickupDate, setPickupDate] = useState(searchParams.get("pickupDate") ?? "");
+  const [dropoffDate, setDropoffDate] = useState(searchParams.get("dropoffDate") ?? "");
   const [pickupTime] = useState(searchParams.get("pickupTime") ?? "10:00");
   const [dropoffTime] = useState(searchParams.get("dropoffTime") ?? "10:00");
 
-  // Use ISO strings for overlap detection
-  const pickupISO = new Date(pickupDate).toISOString();
-  const dropoffISO = new Date(dropoffDate).toISOString();
+  const hasDateFilter = Boolean(pickupDate && dropoffDate);
 
-  const carsRaw = useQuery(api.cars.list, {});
-  const unavailableIds = useQuery(api.bookings.getUnavailableCarIds, {
-    pickupDate: pickupISO,
-    returnDate: dropoffISO,
+  const { data: carsRaw, isLoading: carsLoading } = useQuery({
+    queryKey: ["cars"],
+    queryFn: () => carsApi.list(),
+  });
+  const { data: unavailableIds, isLoading: unavailableLoading } = useQuery({
+    queryKey: ["bookings", "unavailable", pickupDate, pickupTime, dropoffDate, dropoffTime],
+    queryFn: () => bookingsApi.getUnavailableCarIds(pickupDate, dropoffDate, pickupTime, dropoffTime),
+    enabled: hasDateFilter,
   });
 
-  const unavailableSet = new Set(unavailableIds ?? []);
+  const unavailableSet = useMemo(() => new Set(unavailableIds ?? []), [unavailableIds]);
 
-  const filtered = (carsRaw ?? []).filter((car) => {
-    if (unavailableSet.has(car._id)) return false;
+  const filtered = useMemo(() => (carsRaw ?? []).filter((car) => {
+    if (!isCustomerVisibleVehicle(car.category)) return false;
+    if (hasDateFilter && unavailableSet.has(car._id)) return false;
     if (category !== "all" && car.category !== category) return false;
     if (transmission !== "all" && car.transmission !== transmission) return false;
     if (fuelType !== "all" && car.fuelType !== fuelType) return false;
@@ -73,7 +235,20 @@ export default function CarsPage() {
     if (sortBy === "price_asc") return a.dailyRate - b.dailyRate;
     if (sortBy === "price_desc") return b.dailyRate - a.dailyRate;
     return 0;
-  });
+  }), [carsRaw, hasDateFilter, unavailableSet, category, transmission, fuelType, maxPrice, sortBy]);
+
+  const clearDates = () => {
+    setPickupDate("");
+    setDropoffDate("");
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete("pickupDate");
+      next.delete("dropoffDate");
+      next.delete("pickupTime");
+      next.delete("dropoffTime");
+      return next;
+    }, { replace: true });
+  };
 
   const clearFilters = () => {
     setCategory("all");
@@ -85,36 +260,36 @@ export default function CarsPage() {
 
   const hasFilters = category !== "all" || transmission !== "all" || fuelType !== "all" || maxPrice[0] < 500 || sortBy !== "default";
 
-  const handleBookNow = (carId: string) => {
-    const params = new URLSearchParams();
-    params.set("pickupDate", pickupDate);
-    params.set("pickupTime", pickupTime);
-    params.set("dropoffDate", dropoffDate);
-    params.set("dropoffTime", dropoffTime);
-    if (searchParams.get("pickupLocation")) params.set("pickupLocation", searchParams.get("pickupLocation")!);
-    if (searchParams.get("dropoffLocation")) params.set("dropoffLocation", searchParams.get("dropoffLocation")!);
-    navigate(`/book/${carId}?${params.toString()}`);
-  };
+  const handleBookNow = useCallback(() => {
+    navigate("/contact");
+  }, [navigate]);
 
-  const isLoading = carsRaw === undefined || unavailableIds === undefined;
+  const handleOpenCar = useCallback((carId: string) => {
+    navigate(`/cars/${carId}`);
+  }, [navigate]);
 
+  const isLoading = carsLoading || (hasDateFilter && unavailableLoading);
+
+  const availabilityLabel = hasDateFilter
+    ? `${filtered.length} car${filtered.length !== 1 ? "s" : ""} available for selected dates`
+    : `${filtered.length} car${filtered.length !== 1 ? "s" : ""} — select dates to check availability`;
   return (
     <div className="min-h-screen flex flex-col bg-background">
       <Navbar />
       <div className="pt-16">
         {/* Header */}
-        <div className="border-b border-border/50 bg-card/30 py-6">
+        <div className="border-b border-border/50 bg-card/30 py-4 sm:py-6">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-            <div className="flex items-center justify-between flex-wrap gap-3">
-              <div>
-                <h1 className="text-3xl font-bold">Browse Cars</h1>
-                <p className="text-muted-foreground mt-1">
-                  {isLoading ? "Loading..." : `${filtered.length} cars available`}
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+              <div className="min-w-0">
+                <h1 className="text-2xl font-bold sm:text-3xl">Browse Cars</h1>
+                <p className="mt-1 min-h-5 text-sm text-muted-foreground sm:text-base">
+                  {isLoading ? "Loading..." : availabilityLabel}
                 </p>
               </div>
-              <div className="flex items-center gap-3 flex-wrap">
+              <div className="flex w-full shrink-0 items-center gap-2 sm:w-auto sm:gap-3">
                 <Select value={sortBy} onValueChange={setSortBy}>
-                  <SelectTrigger className="w-40">
+                  <SelectTrigger className="h-10 flex-1 sm:w-40">
                     <SelectValue placeholder="Sort by" />
                   </SelectTrigger>
                   <SelectContent>
@@ -124,114 +299,126 @@ export default function CarsPage() {
                   </SelectContent>
                 </Select>
                 <Button
-                  variant="secondary"
+                  variant={showFilters ? "default" : "secondary"}
                   onClick={() => setShowFilters(!showFilters)}
-                  className="flex items-center gap-2 cursor-pointer"
+                  className="h-10 shrink-0 cursor-pointer gap-2 px-3 sm:px-4"
                 >
                   <SlidersHorizontal className="h-4 w-4" />
                   Filters
-                  {hasFilters && <Badge className="h-4 w-4 p-0 flex items-center justify-center text-[10px] ml-1">!</Badge>}
+                  <Badge
+                    aria-hidden={!hasFilters}
+                    className={cn(
+                      "ml-0.5 flex h-4 w-4 items-center justify-center p-0 text-[10px]",
+                      !hasFilters && "invisible",
+                    )}
+                  >
+                    !
+                  </Badge>
                 </Button>
               </div>
             </div>
 
-            {/* Dates Bar */}
-            <div className="mt-4 flex items-center gap-4 flex-wrap p-3 rounded-xl bg-card border border-border/50">
-              <Calendar className="h-4 w-4 text-primary shrink-0" />
-              <div className="flex items-center gap-3 flex-wrap flex-1">
-                <div className="flex items-center gap-2">
-                  <Label className="text-xs text-muted-foreground whitespace-nowrap">Pickup:</Label>
-                  <Input
-                    type="date"
-                    min={today}
+            {/* Availability dates */}
+            <div className="mt-3 w-full rounded-lg border border-border/60 bg-background px-3 pb-3 pt-1.5 shadow-sm sm:mt-4 sm:flex sm:items-end sm:gap-3 sm:px-3 sm:py-2">
+              <div className="grid min-w-0 flex-1 grid-cols-2 gap-2 sm:gap-3">
+                <div className="min-w-0 space-y-1">
+                  <label className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                    Pickup
+                  </label>
+                  <DatePicker
                     value={pickupDate}
-                    onChange={(e) => setPickupDate(e.target.value)}
-                    className="h-8 text-xs w-36"
+                    minDate={today}
+                    label="Pick up"
+                    selectedHint="Pick up"
+                    onChange={(date) => {
+                      setPickupDate(date);
+                      if (dropoffDate && dropoffDate < date) setDropoffDate(date);
+                      setSearchParams((prev) => {
+                        const next = new URLSearchParams(prev);
+                        next.set("pickupDate", date);
+                        if (dropoffDate && dropoffDate < date) next.set("dropoffDate", date);
+                        return next;
+                      }, { replace: true });
+                    }}
+                    className="w-full min-w-0"
+                    triggerClassName={browseDateFieldClass}
+                    align="start"
+                    placeholder="Pickup date"
                   />
                 </div>
-                <div className="flex items-center gap-2">
-                  <Label className="text-xs text-muted-foreground whitespace-nowrap">Drop-off:</Label>
-                  <Input
-                    type="date"
-                    min={pickupDate}
+                <div className="min-w-0 space-y-1">
+                  <label className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                    Drop-off
+                  </label>
+                  <DatePicker
                     value={dropoffDate}
-                    onChange={(e) => setDropoffDate(e.target.value)}
-                    className="h-8 text-xs w-36"
+                    minDate={pickupDate || today}
+                    label="Drop-off"
+                    selectedHint="Drop-off"
+                    onChange={(date) => {
+                      setDropoffDate(date);
+                      setSearchParams((prev) => {
+                        const next = new URLSearchParams(prev);
+                        next.set("dropoffDate", date);
+                        return next;
+                      }, { replace: true });
+                    }}
+                    className="w-full min-w-0"
+                    triggerClassName={browseDateFieldClass}
+                    align="start"
+                    placeholder="Drop-off date"
                   />
                 </div>
-                <p className="text-xs text-muted-foreground">Showing availability for selected dates</p>
               </div>
+              {hasDateFilter && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={clearDates}
+                  className="mt-2 h-10 shrink-0 cursor-pointer px-2 text-xs text-muted-foreground hover:text-foreground sm:mt-0"
+                >
+                  <X className="mr-1 h-3.5 w-3.5" />
+                  Clear
+                </Button>
+              )}
             </div>
           </div>
         </div>
 
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
           {/* Category Tabs */}
-          <div className="flex gap-2 flex-wrap mb-6">
+          <div className="-mx-4 mb-5 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0">
             {CATEGORIES.map((cat) => (
               <button
                 key={cat}
                 onClick={() => setCategory(cat)}
-                className={`px-4 py-1.5 rounded-full text-sm font-medium capitalize transition-all cursor-pointer border ${
+                className={`shrink-0 rounded-full border px-4 py-2 text-sm font-medium capitalize transition-all cursor-pointer ${
                   category === cat
-                    ? "bg-primary text-primary-foreground border-primary"
-                    : "border-border text-muted-foreground hover:border-primary/50 hover:text-foreground"
+                    ? "border-primary bg-primary text-primary-foreground shadow-sm"
+                    : "border-border bg-background text-muted-foreground hover:border-primary/50 hover:text-foreground"
                 }`}
               >
-                {cat}
+                {formatVehicleCategoryLabel(cat)}
               </button>
             ))}
           </div>
 
           {/* Filters Panel */}
           {showFilters && (
-            <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: "auto" }}
-              exit={{ opacity: 0, height: 0 }}
-              className="mb-6 p-4 rounded-xl bg-card border border-border/50"
-            >
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="font-semibold text-sm">Filters</h3>
-                {hasFilters && (
-                  <button onClick={clearFilters} className="text-xs text-primary flex items-center gap-1 cursor-pointer hover:underline">
-                    <X className="h-3 w-3" /> Clear all
-                  </button>
-                )}
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div className="space-y-2">
-                  <label className="text-xs text-muted-foreground font-medium">Transmission</label>
-                  <Select value={transmission} onValueChange={setTransmission}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {TRANSMISSIONS.map((t) => <SelectItem key={t} value={t} className="capitalize">{t}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-xs text-muted-foreground font-medium">Fuel Type</label>
-                  <Select value={fuelType} onValueChange={setFuelType}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {FUEL_TYPES.map((f) => <SelectItem key={f} value={f} className="capitalize">{f}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-xs text-muted-foreground font-medium">Max Price: ${maxPrice[0]}/day</label>
-                  <Slider
-                    min={20} max={500} step={10}
-                    value={maxPrice}
-                    onValueChange={setMaxPrice}
-                    className="mt-3"
-                  />
-                </div>
-              </div>
-            </motion.div>
+            <CarsFiltersPanel
+              transmission={transmission}
+              fuelType={fuelType}
+              maxPrice={maxPrice}
+              hasFilters={hasFilters}
+              onTransmissionChange={setTransmission}
+              onFuelTypeChange={setFuelType}
+              onMaxPriceChange={setMaxPrice}
+              onClearFilters={clearFilters}
+            />
           )}
 
           {/* Car Grid */}
+          <div className="min-h-[28rem]">
           {isLoading ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
               {Array.from({ length: 6 }).map((_, i) => (
@@ -243,74 +430,37 @@ export default function CarsPage() {
               <Car className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
               <h3 className="text-lg font-semibold mb-2">No cars available</h3>
               <p className="text-muted-foreground text-sm mb-4">
-                {hasFilters ? "Try adjusting your filters" : "No cars available for these dates — try different dates"}
+                {hasFilters
+                  ? "Try adjusting your filters"
+                  : hasDateFilter
+                  ? "No cars available for these dates — try different dates"
+                  : "No cars match your criteria"}
               </p>
-              {hasFilters && <Button onClick={clearFilters} className="cursor-pointer">Clear Filters</Button>}
+              {(hasFilters || hasDateFilter) && (
+                <Button
+                  onClick={() => {
+                    clearFilters();
+                    clearDates();
+                  }}
+                  className="cursor-pointer"
+                >
+                  Clear Filters
+                </Button>
+              )}
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-              {filtered.map((car, i) => {
-                const imgSrc = (car.resolvedImageUrls && car.resolvedImageUrls[0]) ?? car.imageUrl ?? CAR_IMAGES[car.category] ?? CAR_IMAGES.sedan;
-                return (
-                  <motion.div
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+              {filtered.map((car) => (
+                <CarListingCard
                     key={car._id}
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: i * 0.05, duration: 0.4 }}
-                    whileHover={{ y: -4 }}
-                  >
-                    <Card
-                      className="overflow-hidden border-border/50 bg-card/60 hover:border-primary/40 transition-all duration-300 cursor-pointer group"
-                      onClick={() => navigate(`/cars/${car._id}`)}
-                    >
-                      <div className="relative overflow-hidden h-48">
-                        <img
-                          src={imgSrc}
-                          alt={`${car.make} ${car.model}`}
-                          className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                        />
-                        <div className="absolute top-3 left-3">
-                          <Badge className="bg-background/80 backdrop-blur border-0 text-xs capitalize">
-                            {car.category}
-                          </Badge>
-                        </div>
-                      </div>
-                      <CardContent className="p-4">
-                        <div className="flex items-start justify-between mb-2">
-                          <div>
-                            <h3 className="font-semibold">{car.year} {car.make} {car.model}</h3>
-                            <p className="text-xs text-muted-foreground capitalize">{car.color} · {car.transmission}</p>
-                          </div>
-                          <div className="text-right shrink-0">
-                            <span className="text-xl font-bold text-primary">${car.dailyRate}</span>
-                            <span className="text-xs text-muted-foreground">/day</span>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-3 text-xs text-muted-foreground mb-3">
-                          <span className="flex items-center gap-1"><Users className="h-3 w-3" />{car.seats} seats</span>
-                          <span className="flex items-center gap-1"><Fuel className="h-3 w-3" />{car.fuelType}</span>
-                          {car.mileage && <span className="flex items-center gap-1"><Gauge className="h-3 w-3" />{car.mileage.toLocaleString()} km</span>}
-                        </div>
-                        {car.features && car.features.length > 0 && (
-                          <div className="flex gap-1 flex-wrap mb-3">
-                            {car.features.slice(0, 3).map((f) => (
-                              <span key={f} className="text-[10px] bg-secondary text-secondary-foreground px-2 py-0.5 rounded-full">{f}</span>
-                            ))}
-                          </div>
-                        )}
-                        <Button
-                          className="w-full h-9 text-sm cursor-pointer"
-                          onClick={(e) => { e.stopPropagation(); handleBookNow(car._id); }}
-                        >
-                          Book Now
-                        </Button>
-                      </CardContent>
-                    </Card>
-                  </motion.div>
-                );
-              })}
+                  car={car}
+                  onOpen={handleOpenCar}
+                  onBook={handleBookNow}
+                />
+              ))}
             </div>
           )}
+          </div>
         </div>
       </div>
       <Footer />

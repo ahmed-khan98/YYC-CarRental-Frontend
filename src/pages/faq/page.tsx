@@ -14,7 +14,7 @@ const FAQS = [
       },
       {
         q: "Can I modify my booking after it's confirmed?",
-        a: "Currently, modifications to existing bookings are not supported online. To modify your booking, please contact our support team at hello@yycdrive.ca at least 24 hours before your pickup time, and we'll do our best to accommodate your changes.",
+        a: "Currently, modifications to existing bookings are not supported online. To modify your booking, please contact our support team at hello@yyccarrental.ca at least 24 hours before your pickup time, and we'll do our best to accommodate your changes.",
       },
       {
         q: "Can the admin book a car on my behalf?",
@@ -31,14 +31,14 @@ const FAQS = [
     questions: [
       {
         q: "What is the cancellation policy?",
-        a: "You can cancel your booking up to 24 hours before the scheduled pickup time at no charge. Cancellations within 24 hours of pickup may incur a cancellation fee equivalent to one day's rental rate. No-shows are charged the full booking amount.",
+        a: "No payment is taken when you book. Payment is collected at check-in (deposit) and any remaining balance at check-out. If you cancel 72+ hours before pick-up, a 1-day rental fee is due. Within 72 hours of pick-up, the full booking amount is due. No-shows are charged the full booking amount.",
       },
       {
         q: "How long do refunds take?",
         a: "Refunds for eligible cancellations are processed within 5–10 business days, depending on your bank or card issuer.",
       },
       {
-        q: "What if YYCDrive cancels my booking?",
+        q: "What if YYC Car Rental cancels my booking?",
         a: "In the rare case that we need to cancel your booking (e.g., vehicle unavailability due to unforeseen maintenance), you will receive a full refund and a written explanation. We will also try to offer you an alternative vehicle if available.",
       },
     ],
@@ -143,7 +143,7 @@ export default function FAQPage() {
               </div>
               <h1 className="text-4xl font-bold mb-3">Frequently Asked Questions</h1>
               <p className="text-muted-foreground max-w-xl mx-auto">
-                Find answers to the most common questions about renting with YYCDrive. Can't find what you're looking for? Contact us at hello@yycdrive.ca.
+                Find answers to the most common questions about renting with YYC Car Rental. Can't find what you're looking for? Contact us at hello@yyccarrental.ca.
               </p>
             </motion.div>
 
