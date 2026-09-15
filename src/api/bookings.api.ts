@@ -1,3 +1,4 @@
+import { openPdfAfterFetch, openPdfBlob } from "@/lib/openPdf.ts";
 import { API_BASE, apiClient, getStoredToken } from "./client.ts";
 import type { Booking, BookingDetail, BookingStatus, BillEntry, BillEntryResponse, BillEntryType, BillEntryStatus, BillPaidVia, BillSummary } from "@/types/index.ts";
 import type { CancellationPolicyType } from "@/lib/cancellation.ts";
@@ -207,28 +208,22 @@ export const bookingsApi = {
     });
     if (!response.ok) throw new Error("Failed to download full invoice PDF");
     const blob = await response.blob();
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
     const disposition = response.headers.get("Content-Disposition");
     const headerName = disposition?.match(/filename="([^"]+)"/)?.[1];
-    link.download = headerName ?? filename ?? `invoice-${bookingId.slice(-8)}-ALL.pdf`;
-    link.click();
-    window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    openPdfBlob(blob, headerName ?? filename ?? `invoice-${bookingId.slice(-8)}-ALL.pdf`);
   },
   getBillEntryInvoicePdfUrl: (bookingId: string, entryId: string) => {
     return `${API_BASE}/bookings/${bookingId}/bill-entries/${entryId}/invoice-pdf`;
   },
   openBillEntryInvoicePdf: async (bookingId: string, entryId: string) => {
-    const token = getStoredToken();
-    const response = await fetch(bookingsApi.getBillEntryInvoicePdfUrl(bookingId, entryId), {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    });
-    if (!response.ok) throw new Error("Failed to load invoice PDF");
-    const blob = await response.blob();
-    const url = URL.createObjectURL(blob);
-    window.open(url, "_blank", "noopener,noreferrer");
-    window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    await openPdfAfterFetch(async () => {
+      const token = getStoredToken();
+      const response = await fetch(bookingsApi.getBillEntryInvoicePdfUrl(bookingId, entryId), {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!response.ok) throw new Error("Failed to load invoice PDF");
+      return response.blob();
+    }, `invoice-${entryId.slice(-8)}.pdf`);
   },
   downloadBillEntryInvoicePdf: async (bookingId: string, entryId: string, filename?: string) => {
     const token = getStoredToken();
@@ -237,13 +232,8 @@ export const bookingsApi = {
     });
     if (!response.ok) throw new Error("Failed to download invoice PDF");
     const blob = await response.blob();
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
     const disposition = response.headers.get("Content-Disposition");
     const headerName = disposition?.match(/filename="([^"]+)"/)?.[1];
-    link.download = headerName ?? filename ?? `invoice-${entryId.slice(-8)}.pdf`;
-    link.click();
-    window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    openPdfBlob(blob, headerName ?? filename ?? `invoice-${entryId.slice(-8)}.pdf`);
   },
 };

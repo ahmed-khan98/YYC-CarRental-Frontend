@@ -14,7 +14,7 @@ export const carsApi = {
     const res = await apiClient.get<Car>(`/cars/${carId}`);
     return res.data;
   },
-  create: async (data: Omit<Car, "_id" | "_creationTime" | "resolvedImageUrls" | "primaryImage">) => {
+  create: async (data: Omit<Car, "_id" | "_creationTime">) => {
     const res = await apiClient.post<Car>("/cars", data);
     return res.data;
   },

@@ -4,12 +4,20 @@ import { Button } from "@/components/ui/button.tsx";
 import { Label } from "@/components/ui/label.tsx";
 import { cn } from "@/lib/utils.ts";
 import { mediaKindFromFile } from "@/lib/mediaUrl.ts";
+import { compressImageForUpload, snapshotVideoFrame } from "@/lib/compressImage.ts";
 import { toast } from "sonner";
 
 export const MAX_CAR_IMAGES = 10;
 export const MAX_CAR_VIDEOS = 2;
 export const MAX_CAR_IMAGE_BYTES = 50 * 1024 * 1024;
 export const MAX_CAR_VIDEO_BYTES = 100 * 1024 * 1024;
+const MAX_RECORD_SECONDS = 30;
+const CAMERA_VIDEO = {
+  facingMode: { ideal: "environment" as const },
+  width: { ideal: 1280, max: 1280 },
+  height: { ideal: 720, max: 720 },
+  frameRate: { ideal: 24, max: 30 },
+};
 
 function stopStream(stream: MediaStream | null) {
   stream?.getTracks().forEach((track) => track.stop());
@@ -115,12 +123,23 @@ export function CarMediaCapture({
     const startedAt = Date.now();
     setRecordingSeconds(0);
     const intervalId = window.setInterval(() => {
-      setRecordingSeconds(Math.floor((Date.now() - startedAt) / 1000));
+      const elapsed = Math.floor((Date.now() - startedAt) / 1000);
+      setRecordingSeconds(elapsed);
+      if (elapsed >= MAX_RECORD_SECONDS && recorderRef.current?.state === "recording") {
+        recorderRef.current.stop();
+      }
     }, 250);
     return () => window.clearInterval(intervalId);
   }, [recording]);
 
-  const addFiles = (incoming: File[]) => {
+  const addFiles = async (incoming: File[]) => {
+    const prepared: File[] = [];
+    for (const file of incoming) {
+      prepared.push(
+        mediaKindFromFile(file) === "image" ? await compressImageForUpload(file) : file,
+      );
+    }
+    incoming = prepared;
     const current = filesRef.current;
     const nextImages = current.filter((file) => mediaKindFromFile(file) === "image");
     const nextVideos = current.filter((file) => mediaKindFromFile(file) === "video");
@@ -231,7 +250,7 @@ export function CarMediaCapture({
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } },
+        video: CAMERA_VIDEO,
         audio: mode === "video",
       });
       streamRef.current = stream;
@@ -267,28 +286,15 @@ export function CarMediaCapture({
       return;
     }
 
-    const canvas = document.createElement("canvas");
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    const context = canvas.getContext("2d");
-    if (!context) {
-      toast.error("Could not capture photo");
-      return;
-    }
-    context.drawImage(video, 0, 0);
-    canvas.toBlob(
-      (blob) => {
-        if (!blob) {
-          toast.error("Could not capture photo");
-          return;
-        }
-        addFiles([new File([blob], `car-${Date.now()}.jpg`, { type: "image/jpeg" })]);
-        const nextImageCount = filesRef.current.filter((file) => mediaKindFromFile(file) === "image").length;
+    void snapshotVideoFrame(video, `car-${Date.now()}.jpg`)
+      .then(async (file) => {
+        await addFiles([file]);
+        const nextImageCount = filesRef.current.filter((item) => mediaKindFromFile(item) === "image").length;
         if (nextImageCount >= MAX_CAR_IMAGES) closeCamera();
-      },
-      "image/jpeg",
-      0.92,
-    );
+      })
+      .catch(() => {
+        toast.error("Could not capture photo");
+      });
   };
 
   const startRecording = () => {
@@ -298,9 +304,17 @@ export function CarMediaCapture({
       return;
     }
     const mimeType = pickRecorderMimeType();
-    const recorder = mimeType
-      ? new MediaRecorder(stream, { mimeType })
-      : new MediaRecorder(stream);
+    const options: MediaRecorderOptions = {
+      videoBitsPerSecond: 1_000_000,
+      audioBitsPerSecond: 64_000,
+    };
+    if (mimeType) options.mimeType = mimeType;
+    let recorder: MediaRecorder;
+    try {
+      recorder = new MediaRecorder(stream, options);
+    } catch {
+      recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+    }
     chunksRef.current = [];
     recorder.ondataavailable = (event) => {
       if (event.data.size > 0) chunksRef.current.push(event.data);
@@ -340,7 +354,7 @@ export function CarMediaCapture({
         Car photos & videos (optional, up to {MAX_CAR_IMAGES} photos and {MAX_CAR_VIDEOS} videos)
       </Label>
       <p className="text-[11px] text-muted-foreground">
-        Photos up to {formatBytes(MAX_CAR_IMAGE_BYTES)} each. Videos up to {formatBytes(MAX_CAR_VIDEO_BYTES)} each.
+        Photos are compressed on the phone. Recorded videos are 720p and stop at {MAX_RECORD_SECONDS} seconds so they upload on mobile.
       </p>
 
       {cameraMode ? (
@@ -397,7 +411,7 @@ export function CarMediaCapture({
                 aria-live="polite"
               >
                 <span className="inline-block h-1.5 w-1.5 rounded-full bg-destructive" aria-hidden />
-                {formatRecordingDuration(recordingSeconds)}
+                {formatRecordingDuration(recordingSeconds)} / {formatRecordingDuration(MAX_RECORD_SECONDS)}
               </span>
             ) : null}
           </div>

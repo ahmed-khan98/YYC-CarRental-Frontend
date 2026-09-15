@@ -1,3 +1,4 @@
+import { openPdfAfterFetch } from "@/lib/openPdf.ts";
 import { API_BASE, apiClient, getStoredToken } from "./client.ts";
 import type { ExtraDriverCheckInDetail, FuelLevel, InspectionType, MainDriverCheckInDetail, VehicleInspection } from "@/types/index.ts";
 import type { ExtraMileageBilling } from "@/lib/extraMileage.ts";
@@ -61,30 +62,35 @@ export const inspectionsApi = {
     if (!response.ok) {
       throw new Error("Failed to load agreement PDF");
     }
-    return response.blob();
+    const blob = await response.blob();
+    const header = await blob.slice(0, 5).text();
+    if (!header.startsWith("%PDF")) {
+      throw new Error("Failed to load agreement PDF");
+    }
+    const filename = `${draft.mode === "check_out" ? "check-out" : "check-in"}-agreement-${bookingId}.pdf`;
+    return new File([blob], filename, { type: "application/pdf" });
   },
   getSignedPdfUrl: (inspectionId: string) => {
     return `${API_BASE}/inspections/signed-pdf/${inspectionId}`;
   },
   openSignedPdf: async (inspectionId: string) => {
-    const token = getStoredToken();
-    const response = await fetch(inspectionsApi.getSignedPdfUrl(inspectionId), {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    });
-    if (!response.ok) {
-      let message = "Failed to load signed PDF";
-      try {
-        const data = (await response.json()) as { message?: string };
-        if (data?.message) message = data.message;
-      } catch {
-        // keep default message when the body is not JSON
+    await openPdfAfterFetch(async () => {
+      const token = getStoredToken();
+      const response = await fetch(inspectionsApi.getSignedPdfUrl(inspectionId), {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!response.ok) {
+        let message = "Failed to load signed PDF";
+        try {
+          const data = (await response.json()) as { message?: string };
+          if (data?.message) message = data.message;
+        } catch {
+          // keep default message when the body is not JSON
+        }
+        throw new Error(message);
       }
-      throw new Error(message);
-    }
-    const blob = await response.blob();
-    const url = URL.createObjectURL(blob);
-    window.open(url, "_blank", "noopener,noreferrer");
-    window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      return response.blob();
+    }, `agreement-${inspectionId}.pdf`);
   },
   listByBooking: async (bookingId: string) => {
     const res = await apiClient.get<VehicleInspection[]>(`/inspections/booking/${bookingId}`);

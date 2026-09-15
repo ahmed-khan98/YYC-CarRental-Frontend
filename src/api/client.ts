@@ -10,6 +10,8 @@ export const API_BASE = String(
   import.meta.env.VITE_API_BASE_URL || "https://api.yyccarrental.com/api/v1",
 ).replace(/\/$/, "");
 
+export const API_ORIGIN = API_BASE.replace(/\/api(?:\/v1)?$/i, "") || "https://api.yyccarrental.com";
+
 type RetryConfig = InternalAxiosRequestConfig & { _retry?: boolean };
 
 let refreshPromise: Promise<string | null> | null = null;
@@ -111,6 +113,9 @@ function getRefreshPromise() {
 
 export const apiClient = axios.create({
   baseURL: API_BASE,
+  timeout: 180_000,
+  maxContentLength: 120 * 1024 * 1024,
+  maxBodyLength: 120 * 1024 * 1024,
 });
 
 apiClient.interceptors.request.use((config) => {
@@ -172,8 +177,11 @@ apiClient.interceptors.response.use(
 
 export function getApiErrorMessage(error: unknown): string {
   if (axios.isAxiosError(error)) {
+    if (error.code === "ECONNABORTED") {
+      return "The request timed out. Photos or videos may be too large — try again with smaller files.";
+    }
     if (error.code === "ERR_NETWORK" || !error.response) {
-      return "Cannot reach the API server. Start the backend with: npm run dev (YYC-CAR-RENTAL-BACKEND)";
+      return "Could not reach the server. Check your connection, then try again. If this continues, the upload may be too large for the server proxy.";
     }
     const data = error.response?.data as { message?: string } | undefined;
     return data?.message ?? error.message;

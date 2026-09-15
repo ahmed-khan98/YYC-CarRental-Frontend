@@ -22,6 +22,7 @@ import { isValidRentalPeriod } from "@/lib/rentalPricing.ts";
 import { isExtraDriverService } from "@/lib/extraDriver.ts";
 import { serviceAllowsQuantity } from "@/lib/serviceQuantity.ts";
 import { toast } from "sonner";
+import { carPrimaryImage } from "@/lib/mediaUrl.ts";
 
 const CAR_IMAGES: Record<string, string> = {
   economy: "https://images.unsplash.com/photo-1690278289651-895463644114?w=600&q=80",
@@ -286,8 +287,7 @@ export function BookingForm({ carId }: BookingFormProps) {
     );
   }
 
-  const carImage =
-    car.resolvedImageUrls?.[0] ?? car.imageUrl ?? CAR_IMAGES[car.category] ?? CAR_IMAGES.sedan;
+  const carImage = carPrimaryImage(car, CAR_IMAGES[car.category] ?? CAR_IMAGES.sedan);
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">

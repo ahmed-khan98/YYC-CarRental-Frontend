@@ -12,7 +12,7 @@ import { ArrowLeft, Users, Fuel, Gauge, Cog, MapPin, CheckCircle } from "lucide-
 import { motion } from "motion/react";
 import { cn } from "@/lib/utils.ts";
 import { vehicleCategoryBadgeClass } from "@/lib/vehicleCategories.ts";
-import { resolveMediaUrl } from "@/lib/mediaUrl.ts";
+import { carImageUrls } from "@/lib/mediaUrl.ts";
 
 const CAR_IMAGES: Record<string, string> = {
   economy: "https://images.unsplash.com/photo-1690278289651-895463644114?w=800&q=80",
@@ -69,13 +69,10 @@ export default function CarDetailPage() {
     );
   }
 
-  const images = (
-    car.resolvedImageUrls?.length
-      ? car.resolvedImageUrls
-      : car.imageUrl
-        ? [car.imageUrl]
-        : [CAR_IMAGES[car.category] ?? CAR_IMAGES.sedan]
-  ).map((url) => resolveMediaUrl(url));
+  const images = carImageUrls(car);
+  if (images.length === 0) {
+    images.push(CAR_IMAGES[car.category] ?? CAR_IMAGES.sedan);
+  }
 
   const safeActiveImage = activeImage < images.length ? activeImage : 0;
 
@@ -121,7 +118,7 @@ export default function CarDetailPage() {
                         aria-label={`View photo ${i + 1}`}
                         aria-pressed={safeActiveImage === i}
                         className={cn(
-                          "h-20 w-20 shrink-0 overflow-hidden rounded-md border-2 transition-all sm:h-24 sm:w-24",
+                          "h-12 w-12 shrink-0 overflow-hidden rounded-md border-2 transition-all sm:h-14 sm:w-14",
                           safeActiveImage === i
                             ? "border-primary ring-2 ring-primary/20"
                             : "border-border/50 opacity-80 hover:border-primary/40 hover:opacity-100",

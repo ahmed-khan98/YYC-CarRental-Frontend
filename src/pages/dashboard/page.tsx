@@ -25,7 +25,7 @@ import { CancelBookingDialog } from "@/components/cancel-booking-dialog.tsx";
 import { InspectionMediaGallery } from "@/components/inspection-media.tsx";
 import { useNavigate } from "react-router-dom";
 import { Hint } from "@/components/ui/tooltip.tsx";
-import { resolveMediaUrl } from "@/lib/mediaUrl.ts";
+import { carPrimaryImage, resolveMediaUrl } from "@/lib/mediaUrl.ts";
 
 const STATUS_COLORS: Record<string, string> = {
   pending: "bg-yellow-500/20 text-yellow-400 border-yellow-500/30",
@@ -147,7 +147,7 @@ function RentalHistoryTable({
       headClassName: "whitespace-normal",
       cell: (booking) => {
         const car = carsMap.get(booking.carId);
-        const carImg = car?.resolvedImageUrls?.[0] ?? car?.imageUrl ?? (car ? CAR_IMAGES[car.category] : undefined);
+        const carImg = carPrimaryImage(car, car ? CAR_IMAGES[car.category] : undefined);
         return (
           <div className="flex items-center gap-2">
             {carImg ? (

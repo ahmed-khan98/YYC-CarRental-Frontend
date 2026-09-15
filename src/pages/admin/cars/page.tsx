@@ -20,7 +20,7 @@ import { Hint } from "@/components/ui/tooltip.tsx";
 import { useAuth } from "@/hooks/use-auth.ts";
 import { canDeleteRecords } from "@/lib/roles.ts";
 import { formatCarName } from "@/lib/displayName.ts";
-import { resolveMediaUrl } from "@/lib/mediaUrl.ts";
+import { carImageUrls, carPrimaryImage, resolveMediaUrl } from "@/lib/mediaUrl.ts";
 import {
   VEHICLE_TYPE_FILTER_OPTIONS,
   formatVehicleCategoryLabel,
@@ -136,18 +136,11 @@ export default function AdminCarsPage() {
       features: car.features?.join(", ") ?? "",
     });
     resetImageState();
-    // Load existing images for preview
-    if (car.resolvedImageUrls && car.resolvedImageUrls.length > 0) {
-      setMainImagePreview(resolveMediaUrl(car.resolvedImageUrls[0]));
-      setAdditionalPreviews(car.resolvedImageUrls.slice(1).map((url) => resolveMediaUrl(url)));
-    } else if (car.imageUrl) {
-      setMainImagePreview(resolveMediaUrl(car.imageUrl));
-    }
-    if (car.imageUrls && car.imageUrls.length > 0) {
-      setExistingImageUrls(car.imageUrls);
-    } else if (car.resolvedImageUrls && car.resolvedImageUrls.length > 0) {
-      setExistingImageUrls(car.resolvedImageUrls);
-    }
+    const stored = car.imageUrls?.length ? car.imageUrls : car.imageUrl ? [car.imageUrl] : [];
+    const previews = carImageUrls(car);
+    setExistingImageUrls(stored);
+    setMainImagePreview(previews[0] ?? "");
+    setAdditionalPreviews(previews.slice(1));
     setEditId(car._id);
     setOpen(true);
   };
@@ -241,7 +234,7 @@ export default function AdminCarsPage() {
       id: "vehicle",
       header: "Vehicle",
       cell: (car) => {
-        const imgSrc = (car.resolvedImageUrls && car.resolvedImageUrls[0]) ?? car.imageUrl ?? CAR_IMAGES[car.category];
+        const imgSrc = carPrimaryImage(car, CAR_IMAGES[car.category]);
         return (
           <div className="flex items-center gap-3 min-w-[180px]">
             <img

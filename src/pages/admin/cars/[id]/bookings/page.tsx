@@ -12,7 +12,7 @@ import { Badge } from "@/components/ui/badge.tsx";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card.tsx";
 import { Skeleton } from "@/components/ui/skeleton.tsx";
 import { ArrowLeft, CalendarDays, Car as CarIcon, ListOrdered } from "lucide-react";
-import { resolveMediaUrl } from "@/lib/mediaUrl.ts";
+import { carPrimaryImage, resolveMediaUrl } from "@/lib/mediaUrl.ts";
 
 const CAR_IMAGES: Record<string, string> = {
   economy: "https://images.unsplash.com/photo-1690278289651-895463644114?w=400&q=70",
@@ -81,7 +81,7 @@ export default function AdminCarBookingsPage() {
     return null;
   }
 
-  const imgSrc = car?.resolvedImageUrls?.[0] ?? car?.imageUrl ?? (car ? CAR_IMAGES[car.category] : undefined);
+  const imgSrc = carPrimaryImage(car, car ? CAR_IMAGES[car.category] : undefined);
 
   return (
     <div className="p-6 space-y-4 max-w-6xl">

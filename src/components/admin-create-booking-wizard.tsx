@@ -8,7 +8,7 @@ import { locationsApi } from "@/api/locations.api.ts";
 import { servicesApi } from "@/api/services.api.ts";
 import { usersApi } from "@/api/users.api.ts";
 import { getApiErrorMessage } from "@/api/client.ts";
-import { resolveMediaUrl } from "@/lib/mediaUrl.ts";
+import { carPrimaryImage } from "@/lib/mediaUrl.ts";
 import {
   BookingDetailCard,
   BookingDetailCardContent,
@@ -93,7 +93,7 @@ const today = format(new Date(), "yyyy-MM-dd");
 const tomorrow = format(new Date(Date.now() + 86400000), "yyyy-MM-dd");
 
 function getCarImage(car: Car) {
-  return resolveMediaUrl(car.resolvedImageUrls?.[0] ?? car.imageUrl ?? CAR_IMAGES[car.category] ?? CAR_IMAGES.sedan);
+  return carPrimaryImage(car, CAR_IMAGES[car.category] ?? CAR_IMAGES.sedan);
 }
 
 function WizardStepCompletedIcon() {

@@ -22,7 +22,7 @@ import {
   VEHICLE_TYPE_FILTER_OPTIONS,
 } from "@/lib/vehicleCategories.ts";
 import { cn } from "@/lib/utils.ts";
-import { resolveMediaUrl } from "@/lib/mediaUrl.ts";
+import { carPrimaryImage, resolveMediaUrl } from "@/lib/mediaUrl.ts";
 
 const CATEGORIES = VEHICLE_TYPE_FILTER_OPTIONS;
 const TRANSMISSIONS = ["all", "automatic", "manual"] as const;
@@ -124,11 +124,7 @@ const CarListingCard = memo(function CarListingCard({
   onOpen: (carId: string) => void;
   onBook: () => void;
 }) {
-  const imgSrc =
-    (car.resolvedImageUrls && car.resolvedImageUrls[0])
-    ?? car.imageUrl
-    ?? CAR_IMAGES[car.category]
-    ?? CAR_IMAGES.sedan;
+  const imgSrc = carPrimaryImage(car, CAR_IMAGES[car.category] ?? CAR_IMAGES.sedan);
 
   return (
     <div className="transition-transform duration-300 hover:-translate-y-1">

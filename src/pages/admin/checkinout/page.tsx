@@ -14,7 +14,7 @@ import { Skeleton } from "@/components/ui/skeleton.tsx";
 import { AdminDataTable, type AdminTableColumn } from "@/components/admin-data-table.tsx";
 import { formatDateWithTime } from "@/lib/timeFormat.ts";
 import { formatCarName, formatDisplayName } from "@/lib/displayName.ts";
-import { resolveMediaUrl } from "@/lib/mediaUrl.ts";
+import { carPrimaryImage, resolveMediaUrl } from "@/lib/mediaUrl.ts";
 import { AdminCheckInOutActions } from "@/components/check-in-out.tsx";
 import { InspectionHistoryGrid, pickLatestInspection } from "@/components/inspection-history-grid.tsx";
 import {
@@ -166,7 +166,7 @@ function CheckInOutBookingTable({
       header: "Vehicle",
       cell: (booking) => {
         const car = carsMap.get(booking.carId);
-        const carImg = car?.resolvedImageUrls?.[0] ?? car?.imageUrl ?? (car ? CAR_IMAGES[car.category] : undefined);
+        const carImg = carPrimaryImage(car, car ? CAR_IMAGES[car.category] : undefined);
         return (
           <div className="flex items-center gap-3 min-w-[160px]">
             {carImg ? (

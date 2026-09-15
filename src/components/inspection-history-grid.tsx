@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import type { Booking, VehicleInspection } from "@/types/index.ts";
+import type { Booking, BookingActorInfo, VehicleInspection } from "@/types/index.ts";
 import { formatAppDateTime } from "@/lib/timeFormat.ts";
 import { resolveMediaUrl } from "@/lib/mediaUrl.ts";
 import { BookingActorValue } from "@/components/booking-actor-value.tsx";
@@ -63,9 +63,11 @@ function DriverLicenseCard({
 function InspectionRecordCard({
   inspection,
   booking,
+  performedBy,
 }: {
   inspection: VehicleInspection;
   booking?: Booking;
+  performedBy?: BookingActorInfo | null;
 }) {
   const isCheckIn = inspection.type === "check_in";
   const visible = isCheckIn
@@ -90,10 +92,10 @@ function InspectionRecordCard({
             <p className="text-xs text-muted-foreground">
               {formatAppDateTime(inspection._creationTime)}
             </p>
-            {booking && inspection.performedBy && (
+            {(inspection.performedBy ?? performedBy) && (
               <div className="mt-1">
                 <BookingActorValue
-                  actor={inspection.performedBy}
+                  actor={inspection.performedBy ?? performedBy}
                   compact
                   className="items-start text-left"
                 />
@@ -250,6 +252,8 @@ type InspectionHistoryGridProps = {
   showCheckOut?: boolean;
   /** When set, shows customer visibility toggles on each column (admin). */
   booking?: Booking;
+  checkInPerformedBy?: BookingActorInfo | null;
+  checkOutPerformedBy?: BookingActorInfo | null;
 };
 
 export function InspectionHistoryGrid({
@@ -258,6 +262,8 @@ export function InspectionHistoryGrid({
   showCheckIn = true,
   showCheckOut = true,
   booking,
+  checkInPerformedBy,
+  checkOutPerformedBy,
 }: InspectionHistoryGridProps) {
   const adminMode = Boolean(booking);
   const displayCheckIn = adminMode || showCheckIn;
@@ -276,7 +282,11 @@ export function InspectionHistoryGrid({
       {displayCheckIn && (
         <div className="min-w-0 w-full h-full">
           {checkIn ? (
-            <InspectionRecordCard inspection={checkIn} booking={booking} />
+            <InspectionRecordCard
+              inspection={checkIn}
+              booking={booking}
+              performedBy={checkInPerformedBy}
+            />
           ) : (
             <InspectionPlaceholder type="check_in" />
           )}
@@ -285,7 +295,11 @@ export function InspectionHistoryGrid({
       {displayCheckOut && (
         <div className="min-w-0 w-full h-full">
           {checkOut ? (
-            <InspectionRecordCard inspection={checkOut} booking={booking} />
+            <InspectionRecordCard
+              inspection={checkOut}
+              booking={booking}
+              performedBy={checkOutPerformedBy}
+            />
           ) : (
             <InspectionPlaceholder type="check_out" />
           )}

@@ -23,6 +23,7 @@ import {
 } from "@/components/check-in-out.tsx";
 import { isExtraDriverService } from "@/lib/extraDriver.ts";
 import { formatDisplayName } from "@/lib/displayName.ts";
+import { carPrimaryImage } from "@/lib/mediaUrl.ts";
 import { Badge } from "@/components/ui/badge.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import {
@@ -137,7 +138,7 @@ export default function AdminBookingDetailPage() {
   } = detail;
   const resolvedBillSummary = billSummary ?? computeBillSummary(billEntries);
 
-  const carImg = car?.resolvedImageUrls?.[0] ?? (car ? CAR_IMAGES[car.category] : undefined);
+  const carImg = carPrimaryImage(car, car ? CAR_IMAGES[car.category] : "");
   const checkIn = pickLatestInspection(inspections, "check_in");
   const checkOut = pickLatestInspection(inspections, "check_out");
   const hasExtraDriver = services.some(isExtraDriverService);
@@ -269,28 +270,6 @@ export default function AdminBookingDetailPage() {
                   value={<BookingActorValue actor={updatedBy} timestamp={booking._updatedTime} />}
                 />
               )}
-              {checkInPerformedBy && (
-                <InfoRow
-                  label="Checked in by"
-                  value={
-                    <BookingActorValue
-                      actor={checkInPerformedBy}
-                      timestamp={checkIn?._creationTime}
-                    />
-                  }
-                />
-              )}
-              {checkOutPerformedBy && (
-                <InfoRow
-                  label="Checked out by"
-                  value={
-                    <BookingActorValue
-                      actor={checkOutPerformedBy}
-                      timestamp={checkOut?._creationTime}
-                    />
-                  }
-                />
-              )}
               <InfoRow
                 label="Pickup Location"
                 value={
@@ -408,14 +387,6 @@ export default function AdminBookingDetailPage() {
           </BookingDetailCardContent>
         </BookingDetailCard>
 
-        <AdminSecurityDepositPanel bookingId={booking._id} deposit={securityDeposit} />
-        <AdminInvoicesPanel bookingId={booking._id} billEntries={billEntries} />
-        <AdminManualChargesPanel
-          bookingId={booking._id}
-          billEntries={billEntries}
-          securityDeposit={securityDeposit}
-        />
-
         {(checkIn || checkOut || booking.status === "confirmed" || booking.status === "checked_in") && (
           <BookingDetailCard>
             <BookingDetailCardHeader>
@@ -425,10 +396,31 @@ export default function AdminBookingDetailPage() {
               </div>
             </BookingDetailCardHeader>
             <BookingDetailCardContent>
-              <InspectionHistoryGrid checkIn={checkIn} checkOut={checkOut} booking={booking} />
+              <InspectionHistoryGrid
+                checkIn={checkIn}
+                checkOut={checkOut}
+                booking={booking}
+                checkInPerformedBy={checkInPerformedBy}
+                checkOutPerformedBy={checkOutPerformedBy}
+              />
             </BookingDetailCardContent>
           </BookingDetailCard>
         )}
+
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 items-start">
+          <div className="min-w-0">
+            <AdminManualChargesPanel
+              bookingId={booking._id}
+              billEntries={billEntries}
+              securityDeposit={securityDeposit}
+            />
+          </div>
+          <div className="min-w-0">
+            <AdminInvoicesPanel bookingId={booking._id} billEntries={billEntries} />
+          </div>
+        </div>
+
+        <AdminSecurityDepositPanel bookingId={booking._id} deposit={securityDeposit} />
       </motion.div>
 
       {editOpen && (

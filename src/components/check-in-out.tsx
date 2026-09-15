@@ -38,8 +38,9 @@ import { Switch } from "@/components/ui/switch.tsx";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs.tsx";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select.tsx";
 import { SignaturePad } from "@/components/signature-pad.tsx";
+import { AgreementPdfPreview } from "@/components/agreement-pdf-preview.tsx";
 import { toast } from "sonner";
-import { LogIn, LogOut, FileText, SlidersHorizontal, Eye, EyeOff, Users, UserRound, Plus, Trash2 } from "lucide-react";
+import { LogIn, LogOut, SlidersHorizontal, Eye, EyeOff, Users, UserRound, Plus, Trash2 } from "lucide-react";
 import { Hint } from "@/components/ui/tooltip.tsx";
 
 function invalidateAfterInspectionChange(
@@ -125,6 +126,7 @@ function CheckInDialog({
   const [mainLicenseImage, setMainLicenseImage] = useState<LicenseImageDraft>(EMPTY_LICENSE_IMAGE);
   const [extraLicenseImages, setExtraLicenseImages] = useState<LicenseImageDraft[]>([]);
   const [loading, setLoading] = useState(false);
+  const [savingLabel, setSavingLabel] = useState("Saving...");
   const mainDriverPrefilledRef = useRef(false);
   const paymentAmountDirtyRef = useRef(false);
 
@@ -290,7 +292,10 @@ function CheckInDialog({
           controller.signal,
         );
         if (controller.signal.aborted) return;
-        objectUrl = URL.createObjectURL(blob);
+        const namedPdf = blob instanceof File
+          ? blob
+          : new File([blob], `check-in-agreement-${booking._id}.pdf`, { type: "application/pdf" });
+        objectUrl = URL.createObjectURL(namedPdf);
         setPdfPreviewUrl(objectUrl);
       } catch (error) {
         if (controller.signal.aborted || (error instanceof DOMException && error.name === "AbortError")) {
@@ -371,26 +376,51 @@ function CheckInDialog({
     }
 
     setLoading(true);
+    setSavingLabel("Uploading photos...");
     try {
-      const imageUrls = carMediaFiles.length > 0
-        ? await uploadFiles(carMediaFiles, "inspections")
-        : undefined;
+      let imageUrls: string[] | undefined;
+      try {
+        imageUrls = carMediaFiles.length > 0
+          ? await uploadFiles(carMediaFiles, "inspections", (progress) => {
+              setSavingLabel(
+                `Uploading vehicle file ${progress.fileIndex} of ${progress.fileCount} (${progress.percent}%)`,
+              );
+            })
+          : undefined;
+      } catch (error) {
+        throw new Error(getApiErrorMessage(error) || "Failed to upload vehicle photos or videos");
+      }
 
       if (!mainLicenseImage.file) {
         toast.error("Main driver: license image is required");
         return;
       }
-      const mainLicenseImageUrl = await uploadFile(mainLicenseImage.file, "licenses");
-      const extraLicenseImageUrls = extraDriverCount > 0
-        ? await Promise.all(
-            extraDrivers.map(async (_, index) => {
-              const image = extraLicenseImages[index];
-              if (!image?.file) throw new Error(`Driver ${index + 1}: license image is required`);
-              return uploadFile(image.file, "licenses");
-            }),
-          )
-        : [];
+      let mainLicenseImageUrl: string;
+      let extraLicenseImageUrls: string[] = [];
+      try {
+        setSavingLabel("Uploading license photos...");
+        mainLicenseImageUrl = await uploadFile(mainLicenseImage.file, "licenses", (progress) => {
+          setSavingLabel(`Uploading license photo (${progress.percent}%)`);
+        });
+        extraLicenseImageUrls = [];
+        if (extraDriverCount > 0) {
+          for (let index = 0; index < extraDrivers.length; index += 1) {
+            const image = extraLicenseImages[index];
+            if (!image?.file) throw new Error(`Driver ${index + 1}: license image is required`);
+            extraLicenseImageUrls.push(
+              await uploadFile(image.file, "licenses", (progress) => {
+                setSavingLabel(
+                  `Uploading extra license ${index + 1} of ${extraDriverCount} (${progress.percent}%)`,
+                );
+              }),
+            );
+          }
+        }
+      } catch (error) {
+        throw new Error(getApiErrorMessage(error) || "Failed to upload license images");
+      }
 
+      setSavingLabel("Saving check-in...");
       await createInspection.mutateAsync({
         carId: booking.carId,
         bookingId: booking._id,
@@ -748,24 +778,11 @@ function CheckInDialog({
               Customer: review the rental agreement below, then sign in the signature pad. Your signature will be added to the agreement.
             </p>
 
-            <div className="rounded-xl border border-border/50 overflow-hidden bg-muted/20">
-              <div className="flex items-center gap-2 px-3 py-2 border-b border-border/40 bg-muted/40">
-                <FileText className="h-4 w-4 text-primary" />
-                <span className="text-sm font-medium">Booking Terms & Conditions</span>
-              </div>
-              {pdfPreviewUrl ? (
-                <iframe
-                  key={pdfPreviewUrl}
-                  src={pdfPreviewUrl}
-                  title="Check-in terms and conditions"
-                  className="w-full h-72 bg-white"
-                />
-              ) : (
-                <div className="h-72 flex items-center justify-center text-sm text-muted-foreground">
-                  {pdfLoadError ? "Failed to load agreement PDF" : "Loading agreement PDF..."}
-                </div>
-              )}
-            </div>
+            <AgreementPdfPreview
+              url={pdfPreviewUrl}
+              filename={`check-in-agreement-${booking._id}.pdf`}
+              error={pdfLoadError}
+            />
 
             <SignaturePad onChange={setSignatureDataUrl} />
 
@@ -774,7 +791,7 @@ function CheckInDialog({
                 Back
               </Button>
               <Button onClick={handleCompleteCheckIn} disabled={loading || !signatureDataUrl} className="cursor-pointer">
-                {loading ? "Saving..." : "Complete Check-In"}
+                {loading ? savingLabel : "Complete Check-In"}
               </Button>
             </DialogFooter>
           </TabsContent>
@@ -846,6 +863,7 @@ function CheckOutDialog({
   const [chargeAmount, setChargeAmount] = useState("");
   const [chargeDescription, setChargeDescription] = useState("");
   const [loading, setLoading] = useState(false);
+  const [savingLabel, setSavingLabel] = useState("Saving...");
   const [fuelInitialized, setFuelInitialized] = useState(false);
   const [pendingAutoFuel, setPendingAutoFuel] = useState(false);
   const paymentAmountDirtyRef = useRef(false);
@@ -991,12 +1009,18 @@ function CheckOutDialog({
       return;
     }
     setLoading(true);
+    setSavingLabel("Uploading photos...");
     try {
       const imageUrls = carMediaFiles.length > 0
-        ? await uploadFiles(carMediaFiles, "inspections")
+        ? await uploadFiles(carMediaFiles, "inspections", (progress) => {
+            setSavingLabel(
+              `Uploading vehicle file ${progress.fileIndex} of ${progress.fileCount} (${progress.percent}%)`,
+            );
+          })
         : undefined;
       const checkoutCharges = syncAutoFuelChargeDrafts(chargeDrafts, checkInFuelLevel, fuelLevel);
 
+      setSavingLabel("Saving check-out...");
       const result = await createInspection.mutateAsync({
         carId: booking.carId,
         bookingId: booking._id,
@@ -1333,7 +1357,7 @@ function CheckOutDialog({
         <DialogFooter className="shrink-0 gap-2 border-t border-border/50 px-4 py-3 sm:px-6 sm:py-4">
           <Button variant="secondary" onClick={onClose} className="cursor-pointer">Cancel</Button>
           <Button onClick={handleSubmit} disabled={loading} className="cursor-pointer">
-            {loading ? "Recording..." : "Record Check-Out"}
+            {loading ? savingLabel : "Record Check-Out"}
           </Button>
         </DialogFooter>
       </DialogContent>

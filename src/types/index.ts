@@ -121,10 +121,8 @@ export interface Car {
   licensePlate?: string;
   vin: string;
   dailyRate: number;
-  imageUrl?: string;
   imageUrls?: string[];
-  resolvedImageUrls?: string[];
-  primaryImage?: string | null;
+  imageUrl?: string;
   seats: number;
   transmission: Transmission;
   fuelType: FuelType;

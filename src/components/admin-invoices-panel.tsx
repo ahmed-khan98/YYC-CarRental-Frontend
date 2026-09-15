@@ -28,8 +28,6 @@ export function AdminInvoicesPanel({ bookingId, billEntries }: AdminInvoicesPane
   const [downloadingKeys, setDownloadingKeys] = useState<string[]>([]);
   const invoices = listBookingInvoices(bookingId, billEntries);
 
-  if (invoices.length === 0) return null;
-
   const handleDownload = async (invoice: BookingInvoice) => {
     if (downloadingKeys.includes(invoice.key)) return;
     setDownloadingKeys((current) => [...current, invoice.key]);
@@ -60,6 +58,9 @@ export function AdminInvoicesPanel({ bookingId, billEntries }: AdminInvoicesPane
           Rental and additional services are on the check-in / check-out agreement. Invoices are only for billing entries you add or update.
         </p>
         <div className="space-y-2">
+          {invoices.length === 0 && (
+            <p className="text-sm text-muted-foreground py-2">No invoices on this booking yet.</p>
+          )}
           {invoices.map((invoice) => {
             const loading = downloadingKeys.includes(invoice.key);
             return (

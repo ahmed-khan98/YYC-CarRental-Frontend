@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button.tsx";
 import { Label } from "@/components/ui/label.tsx";
 import { cn } from "@/lib/utils.ts";
 import { resolveMediaUrl } from "@/lib/mediaUrl.ts";
+import { compressImageForUpload, snapshotVideoFrame } from "@/lib/compressImage.ts";
 import { toast } from "sonner";
 
 const MAX_LICENSE_BYTES = 50 * 1024 * 1024;
@@ -61,8 +62,10 @@ export function LicenseImageCapture({
 
   const handleFile = (file: File | undefined | null) => {
     if (!acceptImageFile(file)) return;
-    onSelect(file);
-    closeCamera();
+    void compressImageForUpload(file).then((prepared) => {
+      onSelect(prepared);
+      closeCamera();
+    });
   };
 
   const resetDragState = () => {
@@ -113,7 +116,11 @@ export function LicenseImageCapture({
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } },
+        video: {
+          facingMode: { ideal: "environment" },
+          width: { ideal: 1280, max: 1280 },
+          height: { ideal: 720, max: 720 },
+        },
         audio: false,
       });
       streamRef.current = stream;
@@ -143,26 +150,11 @@ export function LicenseImageCapture({
       return;
     }
 
-    const canvas = document.createElement("canvas");
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    const context = canvas.getContext("2d");
-    if (!context) {
-      toast.error("Could not capture photo");
-      return;
-    }
-    context.drawImage(video, 0, 0);
-    canvas.toBlob(
-      (blob) => {
-        if (!blob) {
-          toast.error("Could not capture photo");
-          return;
-        }
-        handleFile(new File([blob], `license-${Date.now()}.jpg`, { type: "image/jpeg" }));
-      },
-      "image/jpeg",
-      0.92,
-    );
+    void snapshotVideoFrame(video, `license-${Date.now()}.jpg`)
+      .then((file) => handleFile(file))
+      .catch(() => {
+        toast.error("Could not capture photo");
+      });
   };
 
   return (
