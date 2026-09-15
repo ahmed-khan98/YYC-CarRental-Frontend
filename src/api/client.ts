@@ -7,7 +7,7 @@ export const USER_KEY = "yyc_user";
 export const AUTH_SESSION_EXPIRED_EVENT = "yyc:session-expired";
 
 export const API_BASE = String(
-  import.meta.env.VITE_API_BASE_URL || "https://api.yyccarrental.com/api/v1",
+  import.meta.env.API_BASE_URL || "https://api.yyccarrental.com/api/v1",
 ).replace(/\/$/, "");
 
 export const API_ORIGIN = API_BASE.replace(/\/api(?:\/v\d+)?$/i, "") || "https://api.yyccarrental.com";
