@@ -508,7 +508,7 @@ function CheckInDialog({
     <Dialog open={open} onOpenChange={(nextOpen) => { if (nextOpen || loading) return; onClose(); }}>
       <DialogContent
         dismissible={false}
-        className="relative flex w-[calc(100vw-1rem)] max-w-4xl flex-col gap-0 overflow-hidden p-0 max-h-[min(92vh,880px)]"
+        className="flex w-[calc(100vw-1rem)] max-w-4xl flex-col gap-0 overflow-hidden p-0 max-h-[min(92vh,880px)]"
       >
         <InspectionUploadOverlay open={loading} label={savingLabel} />
         <DialogHeader className="shrink-0 px-4 pt-5 pb-3 sm:px-6 sm:pt-6">
@@ -1130,7 +1130,7 @@ function CheckOutDialog({
     <Dialog open={open} onOpenChange={(nextOpen) => { if (nextOpen || loading) return; onClose(); }}>
       <DialogContent
         dismissible={false}
-        className="relative flex w-[calc(100vw-1rem)] max-w-4xl flex-col gap-0 overflow-hidden p-0 max-h-[min(92vh,880px)]"
+        className="flex w-[calc(100vw-1rem)] max-w-4xl flex-col gap-0 overflow-hidden p-0 max-h-[min(92vh,880px)]"
       >
         <InspectionUploadOverlay open={loading} label={savingLabel} />
         <DialogHeader className="shrink-0 px-4 pt-5 pb-3 sm:px-6 sm:pt-6">
