@@ -25,7 +25,7 @@ import { CancelBookingDialog } from "@/components/cancel-booking-dialog.tsx";
 import { InspectionMediaGallery } from "@/components/inspection-media.tsx";
 import { useNavigate } from "react-router-dom";
 import { Hint } from "@/components/ui/tooltip.tsx";
-import { carPrimaryImage, resolveMediaUrl } from "@/lib/mediaUrl.ts";
+import { carPrimaryImage, inspectionMediaUrls, resolveMediaUrl } from "@/lib/mediaUrl.ts";
 
 const STATUS_COLORS: Record<string, string> = {
   pending: "bg-yellow-500/20 text-yellow-400 border-yellow-500/30",
@@ -86,14 +86,14 @@ function InspectionHistory({ bookingId }: { bookingId: string }) {
               </div>
             )}
           </div>
-          {insp.resolvedImageUrls && insp.resolvedImageUrls.length > 0 && (
+          {inspectionMediaUrls(insp).length > 0 && (
             <div className="space-y-1">
               <div className="flex items-center gap-1 text-xs text-muted-foreground">
                 <Camera className="h-3 w-3" />
-                <span>Photos & videos ({insp.resolvedImageUrls.length})</span>
+                <span>Photos & videos ({inspectionMediaUrls(insp).length})</span>
               </div>
               <InspectionMediaGallery
-                urls={insp.resolvedImageUrls}
+                urls={inspectionMediaUrls(insp)}
                 altPrefix="Inspection"
                 thumbClassName="h-14 w-20 object-cover rounded hover:opacity-80 transition-opacity"
               />

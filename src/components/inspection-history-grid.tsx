@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import type { Booking, BookingActorInfo, VehicleInspection } from "@/types/index.ts";
 import { formatAppDateTime } from "@/lib/timeFormat.ts";
-import { resolveMediaUrl } from "@/lib/mediaUrl.ts";
+import { inspectionMediaUrls, resolveMediaUrl } from "@/lib/mediaUrl.ts";
 import { BookingActorValue } from "@/components/booking-actor-value.tsx";
 import { SignedCheckInPdfLink } from "@/components/signed-check-in-pdf-link.tsx";
 import { InspectionMediaGallery } from "@/components/inspection-media.tsx";
@@ -70,6 +70,7 @@ function InspectionRecordCard({
   performedBy?: BookingActorInfo | null;
 }) {
   const isCheckIn = inspection.type === "check_in";
+  const mediaUrls = inspectionMediaUrls(inspection);
   const visible = isCheckIn
     ? booking?.checkInVisibleToUser ?? false
     : booking?.checkOutVisibleToUser ?? false;
@@ -192,14 +193,14 @@ function InspectionRecordCard({
         {isCheckIn ? "View check-in agreement (PDF)" : "View check-out agreement (PDF)"}
       </SignedCheckInPdfLink>
 
-      {inspection.resolvedImageUrls && inspection.resolvedImageUrls.length > 0 && (
+      {mediaUrls.length > 0 && (
         <div className="space-y-2">
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <Camera className="h-3.5 w-3.5" />
-            <span>Condition media ({inspection.resolvedImageUrls.length})</span>
+            <span>Condition media ({mediaUrls.length})</span>
           </div>
           <InspectionMediaGallery
-            urls={inspection.resolvedImageUrls}
+            urls={mediaUrls}
             altPrefix={isCheckIn ? "Check-in" : "Check-out"}
             thumbClassName={CONDITION_MEDIA_THUMB}
           />

@@ -129,6 +129,10 @@ function CheckInDialog({
   const [savingLabel, setSavingLabel] = useState("Saving...");
   const mainDriverPrefilledRef = useRef(false);
   const paymentAmountDirtyRef = useRef(false);
+  const mainLicenseImageRef = useRef(mainLicenseImage);
+  const extraLicenseImagesRef = useRef(extraLicenseImages);
+  mainLicenseImageRef.current = mainLicenseImage;
+  extraLicenseImagesRef.current = extraLicenseImages;
 
   const extraDriverCount = useMemo(() => getBookingExtraDriverCount(booking), [booking]);
 
@@ -167,8 +171,8 @@ function CheckInDialog({
     setPaymentDescription("");
     setExtraDrivers([]);
     setMainDriver(buildMainDriverCheckInForm());
-    revokeLicensePreview(mainLicenseImage);
-    extraLicenseImages.forEach(revokeLicensePreview);
+    revokeLicensePreview(mainLicenseImageRef.current);
+    extraLicenseImagesRef.current.forEach(revokeLicensePreview);
     setMainLicenseImage(EMPTY_LICENSE_IMAGE);
     setExtraLicenseImages([]);
   };
@@ -177,12 +181,23 @@ function CheckInDialog({
     if (!open) {
       mainDriverPrefilledRef.current = false;
       resetState();
-      return;
     }
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
     const count = getBookingExtraDriverCount(booking);
-    setExtraDrivers(count > 0 ? buildExtraDriverCheckInForms(booking, count) : []);
-    setExtraLicenseImages(count > 0 ? Array.from({ length: count }, () => ({ ...EMPTY_LICENSE_IMAGE })) : []);
-  }, [open, booking]);
+    setExtraDrivers((current) => {
+      if (current.length === count && count > 0) return current;
+      return count > 0 ? buildExtraDriverCheckInForms(booking, count) : [];
+    });
+    setExtraLicenseImages((current) => {
+      if (current.length === count) return current;
+      return count > 0
+        ? Array.from({ length: count }, (_, index) => current[index] ?? { ...EMPTY_LICENSE_IMAGE })
+        : [];
+    });
+  }, [open, booking._id, extraDriverCount]);
 
   useEffect(() => {
     if (!open || !customer || mainDriverPrefilledRef.current) return;
@@ -328,13 +343,13 @@ function CheckInDialog({
     const driverError = validateExtraDriverCheckInDetails(
       extraDriverCount,
       extraDrivers,
-      extraLicenseImages,
+      extraLicenseImagesRef.current,
     );
     if (driverError) {
       toast.error(driverError);
       return;
     }
-    if (!mainLicenseImage.file) {
+    if (!mainLicenseImageRef.current.file) {
       toast.error("Main driver: license image is required");
       return;
     }
@@ -359,13 +374,13 @@ function CheckInDialog({
     const driverError = validateExtraDriverCheckInDetails(
       extraDriverCount,
       extraDrivers,
-      extraLicenseImages,
+      extraLicenseImagesRef.current,
     );
     if (driverError) {
       toast.error(driverError);
       return;
     }
-    if (!mainLicenseImage.file) {
+    if (!mainLicenseImageRef.current.file) {
       toast.error("Main driver: license image is required");
       return;
     }
@@ -391,7 +406,8 @@ function CheckInDialog({
         throw new Error(getApiErrorMessage(error) || "Failed to upload vehicle photos or videos");
       }
 
-      if (!mainLicenseImage.file) {
+      const mainLicenseFile = mainLicenseImageRef.current.file;
+      if (!mainLicenseFile) {
         toast.error("Main driver: license image is required");
         return;
       }
@@ -399,13 +415,13 @@ function CheckInDialog({
       let extraLicenseImageUrls: string[] = [];
       try {
         setSavingLabel("Uploading license photos...");
-        mainLicenseImageUrl = await uploadFile(mainLicenseImage.file, "licenses", (progress) => {
+        mainLicenseImageUrl = await uploadFile(mainLicenseFile, "licenses", (progress) => {
           setSavingLabel(`Uploading license photo (${progress.percent}%)`);
         });
         extraLicenseImageUrls = [];
         if (extraDriverCount > 0) {
           for (let index = 0; index < extraDrivers.length; index += 1) {
-            const image = extraLicenseImages[index];
+            const image = extraLicenseImagesRef.current[index];
             if (!image?.file) throw new Error(`Driver ${index + 1}: license image is required`);
             extraLicenseImageUrls.push(
               await uploadFile(image.file, "licenses", (progress) => {
@@ -499,7 +515,7 @@ function CheckInDialog({
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="form" className="space-y-4 mt-4 pb-4">
+          <TabsContent value="form" forceMount className="space-y-4 mt-4 pb-4 data-[state=inactive]:hidden">
             <p className="text-sm text-muted-foreground">
               Admin: record vehicle condition at pickup. The customer will sign the agreement on the next step.
             </p>

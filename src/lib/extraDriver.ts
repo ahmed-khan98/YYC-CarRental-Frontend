@@ -1,5 +1,6 @@
 import type { Booking, ServiceCategory } from "@/types/index.ts";
 import type { ExtraDriverCheckInDetail } from "@/types/index.ts";
+import { isStoredMediaUrl } from "@/lib/mediaUrl.ts";
 
 export type { ExtraDriverCheckInDetail };
 
@@ -48,8 +49,7 @@ function extraDriverHasLicenseImage(
   image?: { file?: File | null } | null,
 ): boolean {
   if (image?.file instanceof File) return true;
-  const url = driver.licenseImageUrl?.trim() ?? "";
-  return /^https?:\/\//i.test(url);
+  return isStoredMediaUrl(driver.licenseImageUrl);
 }
 
 export function validateExtraDriverCheckInDetails(

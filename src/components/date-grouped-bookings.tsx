@@ -15,6 +15,7 @@ import type { Booking, VehicleInspection } from "@/types/index.ts";
 import type { DateGroup, DateGroupItem } from "@/lib/bookingDateGroups.ts";
 import { BookingDropoffCell, BookingPickupCell } from "@/components/booking-schedule-cell.tsx";
 import { InspectionMediaGallery } from "@/components/inspection-media.tsx";
+import { inspectionMediaUrls } from "@/lib/mediaUrl.ts";
 import { Card, CardContent } from "@/components/ui/card.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import { Badge } from "@/components/ui/badge.tsx";
@@ -100,10 +101,9 @@ function InspectionDateRow({
                 </div>
               )}
             </div>
-            {inspection.resolvedImageUrls &&
-              inspection.resolvedImageUrls.length > 0 && (
+            {inspectionMediaUrls(inspection).length > 0 && (
                 <InspectionMediaGallery
-                  urls={inspection.resolvedImageUrls}
+                  urls={inspectionMediaUrls(inspection)}
                   altPrefix="Inspection"
                   thumbClassName="h-12 w-16 object-cover rounded hover:opacity-80 transition-opacity"
                 />

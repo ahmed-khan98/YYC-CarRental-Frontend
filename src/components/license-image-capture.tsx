@@ -4,18 +4,31 @@ import { Button } from "@/components/ui/button.tsx";
 import { Label } from "@/components/ui/label.tsx";
 import { cn } from "@/lib/utils.ts";
 import { resolveMediaUrl } from "@/lib/mediaUrl.ts";
-import { compressImageForUpload, snapshotVideoFrame } from "@/lib/compressImage.ts";
+import { snapshotVideoFrame } from "@/lib/compressImage.ts";
 import { toast } from "sonner";
 
 const MAX_LICENSE_BYTES = 50 * 1024 * 1024;
+const IMAGE_NAME = /\.(jpe?g|png|gif|webp|heic|heif|bmp|avif)$/i;
 
 function stopStream(stream: MediaStream | null) {
   stream?.getTracks().forEach((track) => track.stop());
 }
 
+function isLikelyImageFile(file: File) {
+  if (file.type.startsWith("image/")) return true;
+  if (IMAGE_NAME.test(file.name)) return true;
+  return !file.type && file.size > 0;
+}
+
+function stabilizeImageFile(file: File) {
+  const type = file.type.startsWith("image/") ? file.type : "image/jpeg";
+  const name = file.name?.trim() || `license-${Date.now()}.jpg`;
+  return new File([file], name, { type, lastModified: file.lastModified || Date.now() });
+}
+
 function acceptImageFile(file: File | undefined | null): file is File {
   if (!file) return false;
-  if (!file.type.startsWith("image/")) {
+  if (!isLikelyImageFile(file)) {
     toast.error("Please choose an image file");
     return false;
   }
@@ -62,10 +75,8 @@ export function LicenseImageCapture({
 
   const handleFile = (file: File | undefined | null) => {
     if (!acceptImageFile(file)) return;
-    void compressImageForUpload(file).then((prepared) => {
-      onSelect(prepared);
-      closeCamera();
-    });
+    onSelect(stabilizeImageFile(file));
+    closeCamera();
   };
 
   const resetDragState = () => {
