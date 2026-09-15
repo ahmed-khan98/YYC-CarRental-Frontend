@@ -104,6 +104,7 @@ export interface User {
   name?: string;
   email?: string;
   role?: UserRole;
+  isActive?: boolean;
   phone?: string;
   licenseUrl?: string | null;
   licenseVerified?: boolean;
@@ -215,8 +216,32 @@ export interface Booking {
   billEntries?: BillEntry[];
   checkInBillSnapshot?: { capturedAt?: string; entries?: BillEntry[] };
   checkOutBillSnapshot?: { capturedAt?: string; entries?: BillEntry[] };
+  inspections?: VehicleInspection[];
+  checkIn?: VehicleInspection | null;
+  checkOut?: VehicleInspection | null;
+  checkInPerformedBy?: BookingActorInfo | null;
+  checkOutPerformedBy?: BookingActorInfo | null;
   user?: User | null;
-  car?: Pick<Car, "_id" | "make" | "model" | "year" | "licensePlate"> | null;
+  car?: Pick<
+    Car,
+    | "_id"
+    | "make"
+    | "model"
+    | "year"
+    | "licensePlate"
+    | "color"
+    | "category"
+    | "transmission"
+    | "fuelType"
+    | "seats"
+    | "dailyRate"
+    | "imageUrl"
+    | "imageUrls"
+    | "mileage"
+    | "isAvailable"
+    | "dailyMileageLimit"
+    | "chargePerExtraKm"
+  > | null;
   pickupLocation?: Pick<Location, "_id" | "name" | "city"> | null;
   dropoffLocation?: Pick<Location, "_id" | "name" | "city"> | null;
   _creationTime: number;
@@ -252,6 +277,9 @@ export interface BookingDetail {
   billEntries?: BillEntry[];
   billSummary?: BillSummary;
   securityDeposit?: SecurityDepositSummary;
+  inspections?: VehicleInspection[];
+  checkIn?: VehicleInspection | null;
+  checkOut?: VehicleInspection | null;
 }
 
 export interface ExtraDriverCheckInDetail {
@@ -311,7 +339,30 @@ export interface Maintenance {
   cost?: number;
   status: MaintenanceStatus;
   notes?: string;
+  car?: Pick<Car, "_id" | "make" | "model" | "year" | "licensePlate"> | null;
   _creationTime: number;
+}
+
+export interface AdminOverviewRecentBooking {
+  _id: string;
+  pickupDate: string;
+  totalAmount: number;
+  status: BookingStatus;
+  car: Pick<Car, "_id" | "make" | "model" | "year" | "licensePlate"> | null;
+}
+
+export interface AdminOverview {
+  stats: {
+    totalCars: number;
+    availableCars: number;
+    totalBookings: number;
+    pendingBookings: number;
+    checkedInBookings: number;
+    revenue: number;
+    customers: number;
+    locations: number;
+  };
+  recentBookings: AdminOverviewRecentBooking[];
 }
 
 export interface AuthResponse {

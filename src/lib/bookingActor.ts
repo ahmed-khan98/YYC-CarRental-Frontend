@@ -1,3 +1,4 @@
+import { formatActorDisplayName } from "@/lib/displayName.ts";
 import { roleLabel, type UserRole } from "@/lib/roles.ts";
 
 export interface BookingActor {
@@ -35,7 +36,8 @@ export function actorFromBillEntry(entry?: {
 export function formatBookingActor(actor?: BookingActor | null) {
   if (!actor?.role && !actor?.name) return "—";
   const label = actor.role ? roleLabel(actor.role) : "";
-  if (actor.name && label) return `${label} · ${actor.name}`;
-  if (actor.name) return actor.name;
+  const name = formatActorDisplayName(actor.name, actor.role, "");
+  if (name && label) return `${label} · ${name}`;
+  if (name) return name;
   return label || "—";
 }

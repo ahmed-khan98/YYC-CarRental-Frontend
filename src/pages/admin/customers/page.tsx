@@ -7,7 +7,6 @@ import { Badge } from "@/components/ui/badge.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import { Input } from "@/components/ui/input.tsx";
 import { Label } from "@/components/ui/label.tsx";
-import { Card, CardContent } from "@/components/ui/card.tsx";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog.tsx";
 import { AdminDataTable, type AdminTableColumn } from "@/components/admin-data-table.tsx";
 import { toast } from "sonner";
@@ -110,12 +109,6 @@ export default function AdminCustomersPage() {
           Add Customer
         </Button>
       </div>
-
-      <Card className="border-border/50 bg-card/40">
-        <CardContent className="p-4 text-sm text-muted-foreground">
-          Create customer accounts here, then assign bookings to them from Booking Management.
-        </CardContent>
-      </Card>
 
       <AdminDataTable
         columns={customerColumns}

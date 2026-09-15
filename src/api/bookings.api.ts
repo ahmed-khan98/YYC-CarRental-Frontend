@@ -1,6 +1,7 @@
 import { openPdfAfterFetch, openPdfBlob } from "@/lib/openPdf.ts";
 import { API_BASE, apiClient, getStoredToken } from "./client.ts";
-import type { Booking, BookingDetail, BookingStatus, BillEntry, BillEntryResponse, BillEntryType, BillEntryStatus, BillPaidVia, BillSummary } from "@/types/index.ts";
+import type { FileUploadProgress } from "./upload.api.ts";
+import type { AdminOverview, Booking, BookingDetail, BookingStatus, BillEntry, BillEntryResponse, BillEntryType, BillEntryStatus, BillPaidVia, BillSummary, Car } from "@/types/index.ts";
 import type { CancellationPolicyType } from "@/lib/cancellation.ts";
 
 export interface CancellationPreview {
@@ -30,6 +31,11 @@ export interface CancelBookingResult extends Booking {
 export interface CarBookingCalendarItem extends Booking {
   customerName: string;
   customerEmail?: string | null;
+}
+
+export interface CarBookingsPayload {
+  car: Car;
+  bookings: CarBookingCalendarItem[];
 }
 
 export const bookingsApi = {
@@ -99,8 +105,12 @@ export const bookingsApi = {
     const res = await apiClient.get<Booking[]>("/bookings/admin", { params: { status } });
     return res.data;
   },
+  adminOverview: async () => {
+    const res = await apiClient.get<AdminOverview>("/bookings/admin/overview");
+    return res.data;
+  },
   adminListByCar: async (carId: string) => {
-    const res = await apiClient.get<CarBookingCalendarItem[]>(`/bookings/admin/car/${carId}`);
+    const res = await apiClient.get<CarBookingsPayload>(`/bookings/admin/car/${carId}`);
     return res.data;
   },
   getById: async (bookingId: string) => {
@@ -156,6 +166,7 @@ export const bookingsApi = {
       status?: BillEntryStatus;
       /** @deprecated use status */
       paid?: boolean;
+      onUploadProgress?: (progress: FileUploadProgress) => void;
     },
   ) => {
     const payload = new FormData();
@@ -166,7 +177,12 @@ export const bookingsApi = {
     payload.append("paidVia", data.paidVia);
     if (data.status) payload.append("status", data.status);
     if (data.paid != null) payload.append("paid", String(data.paid));
-    if (data.attachment) payload.append("attachment", data.attachment);
+    if (data.attachment) {
+      const { uploadFile } = await import("@/api/upload.api.ts");
+      const attachmentUrl = await uploadFile(data.attachment, "bill-attachments", data.onUploadProgress);
+      payload.append("attachmentUrl", attachmentUrl);
+      payload.append("attachmentName", data.attachment.name || "attachment");
+    }
     const res = await apiClient.post<BillEntryResponse>(`/bookings/${bookingId}/bill-entries`, payload);
     return res.data;
   },

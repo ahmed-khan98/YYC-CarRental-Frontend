@@ -89,22 +89,31 @@ export function AdminSecurityDepositPanel({ bookingId, deposit }: AdminSecurityD
           )}
         </div>
       </BookingDetailCardHeader>
-      <BookingDetailCardContent className="space-y-3">
+      <BookingDetailCardContent className="space-y-2.5">
         {!collected && (
-          <p className="text-xs text-muted-foreground">
+          <p className="text-xs text-muted-foreground leading-snug">
             A ${SECURITY_DEPOSIT_AMOUNT} pre-authorization is collected at check-in. It is separate from the rental payment.
           </p>
         )}
 
-        <InfoRow label="Total Deposit Amount" value={formatMoney(amount)} />
-        <InfoRow
-          label="Amount Deducted"
-          value={formatMoney(collected ? deposit?.deductedAmount ?? 0 : 0)}
-        />
-        <InfoRow
-          label="Remaining Deposit Balance"
-          value={formatMoney(collected ? deposit?.remainingAmount ?? amount : amount)}
-        />
+        <div className="grid grid-cols-3 gap-1.5">
+          <div className="rounded-lg border border-border/40 bg-muted/20 px-1.5 py-2 text-center">
+            <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Total</p>
+            <p className="mt-0.5 text-sm font-semibold tabular-nums">{formatMoney(amount)}</p>
+          </div>
+          <div className="rounded-lg border border-border/40 bg-muted/20 px-1.5 py-2 text-center">
+            <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Deducted</p>
+            <p className="mt-0.5 text-sm font-semibold tabular-nums">
+              {formatMoney(collected ? deposit?.deductedAmount ?? 0 : 0)}
+            </p>
+          </div>
+          <div className="rounded-lg border border-border/40 bg-muted/20 px-1.5 py-2 text-center">
+            <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Remaining</p>
+            <p className="mt-0.5 text-sm font-semibold tabular-nums">
+              {formatMoney(collected ? deposit?.remainingAmount ?? amount : amount)}
+            </p>
+          </div>
+        </div>
         {status === "refunded" && (
           <InfoRow
             label="Refunded Amount"
@@ -115,7 +124,7 @@ export function AdminSecurityDepositPanel({ bookingId, deposit }: AdminSecurityD
 
         {collected && checkedOut && status !== "refunded" && (
           <div
-            className={`rounded-lg border px-3 py-2.5 text-xs flex items-start gap-2 ${
+            className={`rounded-lg border px-2.5 py-2 text-xs flex items-start gap-2 ${
               refundDueNow
                 ? "border-amber-500/40 bg-amber-500/10 text-amber-800 dark:text-amber-300"
                 : "border-border/50 bg-muted/20 text-muted-foreground"
@@ -137,11 +146,11 @@ export function AdminSecurityDepositPanel({ bookingId, deposit }: AdminSecurityD
         )}
 
         {collected && status !== "refunded" && (
-          <div className="pt-1 space-y-1.5">
+          <div className="space-y-1.5">
             <Button
               type="button"
               size="sm"
-              className="cursor-pointer"
+              className="w-full sm:w-auto cursor-pointer"
               disabled={!deposit?.canRefund || refund.isPending}
               onClick={() => refund.mutate()}
             >

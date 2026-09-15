@@ -28,21 +28,15 @@ const STATUS_COLORS: Record<string, string> = {
 
 export default function AdminMaintenancePage() {
   const queryClient = useQueryClient();
+  const [open, setOpen] = useState(false);
   const { data: cars } = useQuery({
     queryKey: ["cars"],
     queryFn: () => carsApi.list(),
+    enabled: open,
   });
-  const { data: maintenanceScheduled, isLoading: scheduledLoading } = useQuery({
-    queryKey: ["maintenance", "scheduled"],
-    queryFn: () => maintenanceApi.listByStatus("scheduled"),
-  });
-  const { data: maintenanceInProgress } = useQuery({
-    queryKey: ["maintenance", "in_progress"],
-    queryFn: () => maintenanceApi.listByStatus("in_progress"),
-  });
-  const { data: maintenanceCompleted } = useQuery({
-    queryKey: ["maintenance", "completed"],
-    queryFn: () => maintenanceApi.listByStatus("completed"),
+  const { data: allMaintenance = [], isLoading: scheduledLoading } = useQuery({
+    queryKey: ["maintenance"],
+    queryFn: () => maintenanceApi.list(),
   });
 
   const createMaint = useMutation({
@@ -55,15 +49,8 @@ export default function AdminMaintenancePage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["maintenance"] }),
   });
 
-  const [open, setOpen] = useState(false);
   const [form, setForm] = useState<MaintForm>(EMPTY);
   const [loading, setLoading] = useState(false);
-
-  const allMaintenance = [
-    ...(maintenanceScheduled ?? []),
-    ...(maintenanceInProgress ?? []),
-    ...(maintenanceCompleted ?? []),
-  ].sort((a, b) => b._creationTime - a._creationTime);
 
   const f = (k: keyof MaintForm) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
     setForm((p) => ({ ...p, [k]: e.target.value }));
@@ -118,7 +105,7 @@ export default function AdminMaintenancePage() {
       ) : (
         <div className="space-y-3">
           {allMaintenance.map((m) => {
-            const car = (cars ?? []).find((c) => c._id === m.carId);
+            const car = m.car;
             return (
               <Card key={m._id} className="border-border/50 bg-card/60">
                 <CardContent className="p-4">
@@ -129,7 +116,7 @@ export default function AdminMaintenancePage() {
                         <Badge className={`text-[10px] border capitalize ${STATUS_COLORS[m.status] ?? ""}`}>{m.status.replace("_", " ")}</Badge>
                       </div>
                       <p className="text-xs text-muted-foreground">
-                        {car ? `${car.make} ${car.model} (${car.licensePlate})` : "Loading..."}
+                        {car ? `${car.make} ${car.model}${car.licensePlate ? ` (${car.licensePlate})` : ""}` : "Unknown vehicle"}
                       </p>
                       <p className="text-xs text-muted-foreground">{m.description}</p>
                       <p className="text-xs text-muted-foreground">

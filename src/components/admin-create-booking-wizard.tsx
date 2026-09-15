@@ -381,7 +381,7 @@ export function AdminCreateBookingWizard() {
   const [transmission, setTransmission] = useState("all");
   const [fuelType, setFuelType] = useState("all");
 
-  const [unavailableIds, setUnavailableIds] = useState<string[] | null>(null);
+  const [fetchedAvailableCars, setFetchedAvailableCars] = useState<Car[] | null>(null);
   const [selectedCarId, setSelectedCarId] = useState("");
   const [userId, setUserId] = useState("");
   const [servicesForm, setServicesForm] = useState<BookingServicesFormState>(emptyServicesFormState());
@@ -397,11 +397,6 @@ export function AdminCreateBookingWizard() {
     queryKey: ["locations", { activeOnly: true }],
     queryFn: () => locationsApi.list(true),
     enabled: step === 1,
-  });
-  const { data: cars, isLoading: carsLoading } = useQuery({
-    queryKey: ["cars"],
-    queryFn: () => carsApi.list(),
-    enabled: step >= 2,
   });
   const { data: users, isLoading: usersLoading } = useQuery({
     queryKey: ["users"],
@@ -445,12 +440,7 @@ export function AdminCreateBookingWizard() {
     return m;
   }, [locations]);
 
-  const unavailableSet = useMemo(() => new Set(unavailableIds ?? []), [unavailableIds]);
-
-  const baseAvailableCars = useMemo(() => {
-    if (unavailableIds === null) return [];
-    return (cars ?? []).filter((car) => car.isAvailable && !unavailableSet.has(car._id));
-  }, [cars, unavailableIds, unavailableSet]);
+  const baseAvailableCars = fetchedAvailableCars ?? [];
 
   const availableCars = useMemo(() => {
     return baseAvailableCars.filter((car) => {
@@ -474,7 +464,7 @@ export function AdminCreateBookingWizard() {
   const syncSelectedCarWithFilters = useCallback(
     (next: { vehicleType?: string; transmission?: string; fuelType?: string }) => {
       if (!selectedCarId) return;
-      const car = (cars ?? []).find((c) => c._id === selectedCarId);
+      const car = baseAvailableCars.find((c) => c._id === selectedCarId);
       if (!car) return;
 
       const nextVehicleType = next.vehicleType ?? vehicleType;
@@ -488,7 +478,7 @@ export function AdminCreateBookingWizard() {
 
       if (!stillMatches) setSelectedCarId("");
     },
-    [cars, fuelType, selectedCarId, transmission, vehicleType],
+    [baseAvailableCars, fuelType, selectedCarId, transmission, vehicleType],
   );
 
   const handleVehicleTypeChange = useCallback(
@@ -516,8 +506,8 @@ export function AdminCreateBookingWizard() {
   );
 
   const selectedCar = useMemo(
-    () => (cars ?? []).find((c) => c._id === selectedCarId),
-    [cars, selectedCarId],
+    () => baseAvailableCars.find((c) => c._id === selectedCarId),
+    [baseAvailableCars, selectedCarId],
   );
 
   const selectedCustomer = useMemo(
@@ -582,15 +572,14 @@ export function AdminCreateBookingWizard() {
     setPickupLocationName(locationsMap.get(pickupLocationId) ?? "");
     setDropoffLocationName(locationsMap.get(dropoffLocationId) ?? "");
     setSearching(true);
-    void queryClient.prefetchQuery({ queryKey: ["cars"], queryFn: () => carsApi.list() });
     try {
-      const ids = await bookingsApi.getUnavailableCarIds(
+      const cars = await carsApi.listAvailable({
         pickupDate,
         returnDate,
         pickupTime,
         returnTime,
-      );
-      setUnavailableIds(ids);
+      });
+      setFetchedAvailableCars(cars);
       setSelectedCarId("");
       setStep(2);
     } catch (err) {
@@ -649,7 +638,7 @@ export function AdminCreateBookingWizard() {
   };
 
   const goBackToSchedule = () => {
-    setUnavailableIds(null);
+    setFetchedAvailableCars(null);
     setSelectedCarId("");
     setStep(1);
   };
@@ -745,7 +734,7 @@ export function AdminCreateBookingWizard() {
             returnTime={returnTime}
           />
 
-          {searching || (carsLoading && !cars) ? (
+          {searching || fetchedAvailableCars === null ? (
             <div className="space-y-3">
               {Array.from({ length: 3 }).map((_, i) => (
                 <Skeleton key={i} className="h-24 w-full rounded-xl" />

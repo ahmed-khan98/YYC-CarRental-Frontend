@@ -1,29 +1,22 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
-import { bookingsApi } from "@/api/bookings.api.ts";
-import { carsApi } from "@/api/cars.api.ts";
-import { locationsApi } from "@/api/locations.api.ts";
-import { usersApi } from "@/api/users.api.ts";
 import { inspectionsApi } from "@/api/inspections.api.ts";
-import type { Booking, Car, Location, User } from "@/types/index.ts";
+import type { Booking } from "@/types/index.ts";
 import { Badge } from "@/components/ui/badge.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import { Card, CardContent } from "@/components/ui/card.tsx";
-import { Skeleton } from "@/components/ui/skeleton.tsx";
 import { AdminDataTable, type AdminTableColumn } from "@/components/admin-data-table.tsx";
 import { formatDateWithTime } from "@/lib/timeFormat.ts";
 import { formatCarName, formatDisplayName } from "@/lib/displayName.ts";
 import { carPrimaryImage, resolveMediaUrl } from "@/lib/mediaUrl.ts";
 import { AdminCheckInOutActions } from "@/components/check-in-out.tsx";
-import { InspectionHistoryGrid, pickLatestInspection } from "@/components/inspection-history-grid.tsx";
+import { InspectionHistoryGrid } from "@/components/inspection-history-grid.tsx";
 import {
   CarFront, User as UserIcon, MapPin, Calendar,
   Camera, Phone, Mail, Clock,
   ChevronDown, ChevronUp,
 } from "lucide-react";
-import { Hint } from "@/components/ui/tooltip.tsx";
-
 const STATUS_COLORS: Record<string, string> = {
   confirmed: "bg-primary/20 text-primary border-primary/30",
   checked_in: "bg-blue-500/20 text-blue-400 border-blue-500/30",
@@ -44,27 +37,18 @@ const CAR_IMAGES: Record<string, string> = {
 
 function BookingExpandedPanel({
   booking,
-  car,
-  customer,
-  pickupLocation,
-  dropoffLocation,
 }: {
   booking: Booking;
-  car?: Car;
-  customer?: User;
-  pickupLocation?: Location;
-  dropoffLocation?: Location;
 }) {
-  const { data: inspections } = useQuery({
-    queryKey: ["inspections", booking._id],
-    queryFn: () => inspectionsApi.listByBooking(booking._id),
-  });
-
-  const checkIn = pickLatestInspection(inspections, "check_in");
-  const checkOut = pickLatestInspection(inspections, "check_out");
+  const car = booking.car ?? undefined;
+  const customer = booking.user ?? undefined;
+  const pickupLocation = booking.pickupLocation ?? undefined;
+  const dropoffLocation = booking.dropoffLocation ?? undefined;
+  const checkIn = booking.checkIn ?? null;
+  const checkOut = booking.checkOut ?? null;
 
   return (
-    <div className="p-4 space-y-4">
+    <div className="p-2.5 sm:p-4 space-y-3">
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="space-y-2">
           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
@@ -131,11 +115,7 @@ function BookingExpandedPanel({
           </p>
           <AdminCheckInOutActions booking={booking} />
         </div>
-        {!inspections ? (
-          <Skeleton className="h-20 w-full rounded-xl" />
-        ) : (
-          <InspectionHistoryGrid checkIn={checkIn} checkOut={checkOut} booking={booking} />
-        )}
+        <InspectionHistoryGrid checkIn={checkIn} checkOut={checkOut} booking={booking} />
       </div>
     </div>
   );
@@ -144,17 +124,11 @@ function BookingExpandedPanel({
 function CheckInOutBookingTable({
   title,
   bookings,
-  carsMap,
-  usersMap,
-  locationsMap,
   isLoading,
   emptyMessage,
 }: {
   title: string;
   bookings: Booking[];
-  carsMap: Map<string, Car>;
-  usersMap: Map<string, User>;
-  locationsMap: Map<string, Location>;
   isLoading?: boolean;
   emptyMessage?: string;
 }) {
@@ -165,7 +139,7 @@ function CheckInOutBookingTable({
       id: "vehicle",
       header: "Vehicle",
       cell: (booking) => {
-        const car = carsMap.get(booking.carId);
+        const car = booking.car;
         const carImg = carPrimaryImage(car, car ? CAR_IMAGES[car.category] : undefined);
         return (
           <div className="flex items-center gap-3 min-w-[160px]">
@@ -189,7 +163,7 @@ function CheckInOutBookingTable({
       className: "hidden sm:table-cell",
       headClassName: "hidden sm:table-cell",
       cell: (booking) => {
-        const customer = usersMap.get(booking.userId);
+        const customer = booking.user;
         return (
           <div>
             <p className="text-sm font-medium">{formatDisplayName(customer?.name)}</p>
@@ -245,7 +219,7 @@ function CheckInOutBookingTable({
         </Button>
       ),
     },
-  ], [carsMap, usersMap, expandedId]);
+  ], [expandedId]);
 
   if (!isLoading && bookings.length === 0 && !emptyMessage) {
     return null;
@@ -263,13 +237,7 @@ function CheckInOutBookingTable({
         expandedKey={expandedId}
         onRowClick={(b) => setExpandedId(expandedId === b._id ? null : b._id)}
         renderExpandedRow={(booking) => (
-          <BookingExpandedPanel
-            booking={booking}
-            car={carsMap.get(booking.carId)}
-            customer={usersMap.get(booking.userId)}
-            pickupLocation={locationsMap.get(booking.pickupLocationId)}
-            dropoffLocation={locationsMap.get(booking.dropoffLocationId)}
-          />
+          <BookingExpandedPanel booking={booking} />
         )}
       />
     </div>
@@ -278,16 +246,9 @@ function CheckInOutBookingTable({
 
 export default function AdminCheckInOutPage() {
   const { data: bookings, isLoading } = useQuery({
-    queryKey: ["bookings", "admin"],
-    queryFn: () => bookingsApi.adminList(),
+    queryKey: ["inspections", "check-in-out"],
+    queryFn: () => inspectionsApi.checkInOutBoard(),
   });
-  const { data: cars } = useQuery({ queryKey: ["cars"], queryFn: () => carsApi.list() });
-  const { data: users } = useQuery({ queryKey: ["users"], queryFn: () => usersApi.listUsers() });
-  const { data: locations } = useQuery({ queryKey: ["locations"], queryFn: () => locationsApi.list() });
-
-  const carsMap = useMemo(() => new Map((cars ?? []).map((c) => [c._id, c])), [cars]);
-  const usersMap = useMemo(() => new Map((users ?? []).map((u) => [u._id, u])), [users]);
-  const locationsMap = useMemo(() => new Map((locations ?? []).map((l) => [l._id, l])), [locations]);
 
   const confirmedBookings = (bookings ?? []).filter((b) => b.status === "confirmed");
   const checkedInBookings = (bookings ?? []).filter((b) => b.status === "checked_in");
@@ -303,7 +264,7 @@ export default function AdminCheckInOutPage() {
   ];
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="px-2.5 py-3 sm:p-6 space-y-4 sm:space-y-6">
       <div>
         <h2 className="text-2xl font-bold">Check In / Check Out</h2>
         <p className="text-muted-foreground text-sm mt-0.5">
@@ -311,7 +272,7 @@ export default function AdminCheckInOutPage() {
         </p>
       </div>
 
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-3 gap-1.5 sm:gap-4">
         {stats.map((s) => (
           <Card key={s.label} className="border-border/50 bg-card/40 text-center py-4">
             <CardContent className="p-0">
@@ -325,27 +286,18 @@ export default function AdminCheckInOutPage() {
       <CheckInOutBookingTable
         title="Awaiting Check-in"
         bookings={confirmedBookings}
-        carsMap={carsMap}
-        usersMap={usersMap}
-        locationsMap={locationsMap}
         isLoading={isLoading}
       />
 
       <CheckInOutBookingTable
         title="Currently Out"
         bookings={checkedInBookings}
-        carsMap={carsMap}
-        usersMap={usersMap}
-        locationsMap={locationsMap}
         isLoading={isLoading}
       />
 
       <CheckInOutBookingTable
         title="Recently Completed"
         bookings={completedRecently}
-        carsMap={carsMap}
-        usersMap={usersMap}
-        locationsMap={locationsMap}
         isLoading={isLoading}
         emptyMessage="No completed rentals yet"
       />

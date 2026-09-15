@@ -52,10 +52,34 @@ export function AdminDataTable<T>({
 }: AdminDataTableProps<T>) {
   if (isLoading) {
     return (
-      <div className={cn("space-y-2", className)}>
-        {Array.from({ length: loadingRows }).map((_, i) => (
-          <Skeleton key={i} className="h-12 w-full rounded-lg" />
-        ))}
+      <div className={cn("rounded-xl border border-border/50 bg-card/60", className)}>
+        <Table noScroll={noScroll} className={cn("min-w-[640px]", tableClassName)}>
+          <TableHeader>
+            <TableRow className="bg-muted/30 hover:bg-muted/30">
+              {columns.map((col) => (
+                <TableHead key={col.id} className={col.headClassName}>
+                  {col.header}
+                </TableHead>
+              ))}
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {Array.from({ length: loadingRows }).map((_, rowIndex) => (
+              <TableRow key={rowIndex} className="pointer-events-none">
+                {columns.map((col, colIndex) => (
+                  <TableCell key={col.id} className={col.className}>
+                    <Skeleton
+                      className={cn(
+                        "h-3.5",
+                        colIndex === 0 ? "w-24" : colIndex === columns.length - 1 ? "w-16 ml-auto" : "w-3/4",
+                      )}
+                    />
+                  </TableCell>
+                ))}
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
       </div>
     );
   }

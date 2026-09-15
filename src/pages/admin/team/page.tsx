@@ -2,23 +2,25 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { usersApi } from "@/api/users.api.ts";
 import { getApiErrorMessage } from "@/api/client.ts";
-import { roleLabel } from "@/lib/roles.ts";
 import { Button } from "@/components/ui/button.tsx";
 import { Input } from "@/components/ui/input.tsx";
 import { Label } from "@/components/ui/label.tsx";
-import { Card, CardContent } from "@/components/ui/card.tsx";
-import { Skeleton } from "@/components/ui/skeleton.tsx";
 import { Badge } from "@/components/ui/badge.tsx";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog.tsx";
+import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog.tsx";
+import { Switch } from "@/components/ui/switch.tsx";
+import { AdminDataTable, type AdminTableColumn } from "@/components/admin-data-table.tsx";
 import { toast } from "sonner";
-import { Eye, EyeOff, Pencil, Plus, ShieldCheck, Trash2, UserCog } from "lucide-react";
+import { Eye, EyeOff, Pencil, Plus, Trash2, UserCog } from "lucide-react";
 import { Hint } from "@/components/ui/tooltip.tsx";
 import { formatDisplayName } from "@/lib/displayName.ts";
+import { cn } from "@/lib/utils.ts";
 import type { User } from "@/types/index.ts";
 
 export default function AdminTeamPage() {
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<User | null>(null);
   const [editing, setEditing] = useState<User | null>(null);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -54,6 +56,17 @@ export default function AdminTeamPage() {
       queryClient.invalidateQueries({ queryKey: ["users"] });
       toast.success("Sub-Admin updated");
       closeDialog();
+    },
+    onError: (err) => toast.error(getApiErrorMessage(err)),
+  });
+
+  const toggleMutation = useMutation({
+    mutationFn: ({ userId, isActive }: { userId: string; isActive: boolean }) =>
+      usersApi.updateSubAdmin(userId, { isActive }),
+    onSuccess: (_, { isActive }) => {
+      queryClient.invalidateQueries({ queryKey: ["users", "sub-admins"] });
+      queryClient.invalidateQueries({ queryKey: ["users"] });
+      toast.success(`Sub-Admin ${isActive ? "activated" : "deactivated"}`);
     },
     onError: (err) => toast.error(getApiErrorMessage(err)),
   });
@@ -122,94 +135,122 @@ export default function AdminTeamPage() {
     createMutation.mutate({ name: name.trim(), email: email.trim(), password });
   };
 
-  const handleDelete = (id: string, subAdminName?: string) => {
-    if (!confirm(`Remove sub-admin ${subAdminName ?? "account"}?`)) return;
-    deleteMutation.mutate(id);
+  const handleToggle = (userId: string, current: boolean) => {
+    toggleMutation.mutate({ userId, isActive: !current });
   };
+
+  const handleDelete = () => {
+    if (!deleteTarget) return;
+    deleteMutation.mutate(deleteTarget._id, {
+      onSuccess: () => setDeleteTarget(null),
+    });
+  };
+
+  const columns: AdminTableColumn<User>[] = [
+    {
+      id: "name",
+      header: "Name",
+      cell: (user) => (
+        <div className="flex items-center gap-3 min-w-[160px]">
+          <div className="w-9 h-9 rounded-full bg-blue-500/20 flex items-center justify-center text-blue-400 font-bold shrink-0 text-sm">
+            {user.name?.[0]?.toUpperCase() ?? "S"}
+          </div>
+          <span className="font-medium">{formatDisplayName(user.name, "Sub-Admin")}</span>
+        </div>
+      ),
+    },
+    {
+      id: "email",
+      header: "Email",
+      cell: (user) => <span className="text-sm text-muted-foreground">{user.email ?? "—"}</span>,
+    },
+    {
+      id: "status",
+      header: "Status",
+      cell: (user) => {
+        const active = user.isActive !== false;
+        return (
+          <div className="flex items-center gap-2">
+            <Switch
+              checked={active}
+              onCheckedChange={() => handleToggle(user._id, active)}
+              disabled={toggleMutation.isPending}
+              className="cursor-pointer"
+              aria-label={active ? "Deactivate sub-admin" : "Activate sub-admin"}
+            />
+            <Badge
+              variant="outline"
+              className={cn(
+                "text-[11px] font-medium border",
+                active
+                  ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                  : "bg-red-50 text-red-700 border-red-200",
+              )}
+            >
+              {active ? "Active" : "Inactive"}
+            </Badge>
+          </div>
+        );
+      },
+    },
+    {
+      id: "actions",
+      header: "Actions",
+      className: "text-right",
+      headClassName: "text-right",
+      cell: (user) => (
+        <div className="flex items-center justify-end gap-1">
+          <Hint label="Edit sub-admin">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => openEdit(user)}
+              className="cursor-pointer h-8 w-8"
+              aria-label="Edit sub-admin"
+            >
+              <Pencil className="h-4 w-4" />
+            </Button>
+          </Hint>
+          <Hint label="Remove sub-admin">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setDeleteTarget(user)}
+              className="cursor-pointer h-8 w-8 text-destructive hover:text-destructive"
+              aria-label="Remove sub-admin"
+              disabled={deleteMutation.isPending}
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          </Hint>
+        </div>
+      ),
+    },
+  ];
 
   return (
     <div className="p-6 space-y-5">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h2 className="text-2xl font-bold flex items-center gap-2">
-            <UserCog className="h-6 w-6 text-primary" />
-            Sub-Admins
-          </h2>
+          <h2 className="text-2xl font-bold">Sub-Admins</h2>
           <p className="text-muted-foreground text-sm">
-            Create team members with admin panel access
+            {subAdmins?.length ?? 0} team member{(subAdmins?.length ?? 0) === 1 ? "" : "s"}
           </p>
         </div>
         <Button onClick={openCreate} className="cursor-pointer">
           <Plus className="h-4 w-4 mr-2" />
-          Create Sub-Admin
+          Add Sub-Admin
         </Button>
       </div>
 
-      <Card className="border-border/50 bg-card/40">
-        <CardContent className="p-4 text-sm text-muted-foreground">
-          Sub-Admins can access the admin panel to manage cars, bookings, and customers.
-          Only full admins can create, update, or remove sub-admin accounts.
-        </CardContent>
-      </Card>
-
-      {isLoading ? (
-        <div className="space-y-3">
-          {Array.from({ length: 3 }).map((_, i) => (
-            <Skeleton key={i} className="h-16 w-full" />
-          ))}
-        </div>
-      ) : !subAdmins?.length ? (
-        <div className="text-center py-16">
-          <ShieldCheck className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
-          <p className="text-muted-foreground">No sub-admin accounts yet</p>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {subAdmins.map((user) => (
-            <Card key={user._id} className="border-border/50 bg-card/60">
-              <CardContent className="p-4 flex items-center gap-4">
-                <div className="w-10 h-10 rounded-full bg-blue-500/20 flex items-center justify-center text-blue-400 font-bold shrink-0">
-                  {user.name?.[0]?.toUpperCase() ?? "S"}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="font-semibold">{formatDisplayName(user.name, "Sub-Admin")}</p>
-                  <p className="text-xs text-muted-foreground">{user.email}</p>
-                </div>
-                <Badge className="bg-blue-500/20 text-blue-400 border-blue-500/30 text-xs">
-                  {roleLabel(user.role)}
-                </Badge>
-                <Hint label="Edit sub-admin">
-                  <span className="inline-flex">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => openEdit(user)}
-                      className="cursor-pointer"
-                      aria-label="Edit sub-admin"
-                    >
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                  </span>
-                </Hint>
-                <Hint label="Remove sub-admin">
-                  <span className="inline-flex">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => handleDelete(user._id, user.name)}
-                      className="cursor-pointer text-destructive hover:text-destructive"
-                      aria-label="Remove sub-admin"
-                      disabled={deleteMutation.isPending}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </span>
-                </Hint>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
+      <AdminDataTable
+        columns={columns}
+        data={subAdmins ?? []}
+        getRowKey={(user) => user._id}
+        isLoading={isLoading}
+        emptyIcon={UserCog}
+        emptyMessage="No sub-admin accounts yet"
+      />
 
       <Dialog
         open={open}
@@ -289,6 +330,20 @@ export default function AdminTeamPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDeleteDialog
+        open={Boolean(deleteTarget)}
+        onOpenChange={(next) => !next && setDeleteTarget(null)}
+        title="Remove this sub-admin?"
+        description={
+          deleteTarget
+            ? `This will permanently remove ${formatDisplayName(deleteTarget.name, "this account")}. This action cannot be undone.`
+            : ""
+        }
+        confirmLabel="Remove"
+        loading={deleteMutation.isPending}
+        onConfirm={handleDelete}
+      />
     </div>
   );
 }

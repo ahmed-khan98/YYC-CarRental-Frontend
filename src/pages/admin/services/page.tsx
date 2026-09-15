@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label.tsx";
 import { Badge } from "@/components/ui/badge.tsx";
 import { AdminDataTable, type AdminTableColumn } from "@/components/admin-data-table.tsx";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog.tsx";
+import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog.tsx";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select.tsx";
 import { Switch } from "@/components/ui/switch.tsx";
 import { toast } from "sonner";
@@ -80,6 +81,7 @@ export default function AdminServicesPage() {
   const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState<SvcForm>(EMPTY);
   const [loading, setLoading] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<AdditionalService | null>(null);
 
   const f = (k: "name" | "description" | "dailyRate") => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
     setForm((p) => ({ ...p, [k]: e.target.value }));
@@ -131,10 +133,15 @@ export default function AdminServicesPage() {
     finally { setLoading(false); }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm("Delete this service?")) return;
-    try { await remove.mutateAsync(id); toast.success("Deleted"); }
-    catch { toast.error("Failed to delete"); }
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    try {
+      await remove.mutateAsync(deleteTarget._id);
+      toast.success("Deleted");
+      setDeleteTarget(null);
+    } catch {
+      toast.error("Failed to delete");
+    }
   };
 
   const handleToggle = async (id: string, current: boolean) => {
@@ -246,7 +253,7 @@ export default function AdminServicesPage() {
                 <Button
                   variant="ghost"
                   size="icon"
-                  onClick={() => handleDelete(svc._id)}
+                  onClick={() => setDeleteTarget(svc)}
                   className="cursor-pointer h-8 w-8 text-destructive hover:text-destructive"
                   aria-label="Delete service"
                 >
@@ -342,6 +349,19 @@ export default function AdminServicesPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDeleteDialog
+        open={Boolean(deleteTarget)}
+        onOpenChange={(next) => !next && setDeleteTarget(null)}
+        title="Delete this service?"
+        description={
+          deleteTarget
+            ? `This will permanently remove "${deleteTarget.name}". This action cannot be undone.`
+            : ""
+        }
+        loading={remove.isPending}
+        onConfirm={handleDelete}
+      />
     </div>
   );
 }

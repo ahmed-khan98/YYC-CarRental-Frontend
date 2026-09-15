@@ -2,7 +2,6 @@ import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { bookingsApi } from "@/api/bookings.api.ts";
-import { inspectionsApi } from "@/api/inspections.api.ts";
 import { motion } from "motion/react";
 import { format } from "date-fns";
 import { formatRentalDays } from "@/lib/rentalPricing.ts";
@@ -34,7 +33,7 @@ import {
   InfoRow,
   SectionTitle,
 } from "@/components/booking-detail-ui.tsx";
-import { Skeleton } from "@/components/ui/skeleton.tsx";
+import { AdminBookingDetailSkeleton } from "@/components/page-skeleton.tsx";
 import {
   ArrowLeft, MapPin, Calendar, Car, Package,
   LogIn, LogOut, User, Mail, Phone, Clock, AlertCircle, CheckCircle,
@@ -80,28 +79,14 @@ export default function AdminBookingDetailPage() {
     queryFn: () => bookingsApi.getDetailById(id!),
     enabled: !!id,
   });
-  const { data: inspections, isLoading: inspectionsLoading } = useQuery({
-    queryKey: ["inspections", id],
-    queryFn: () => inspectionsApi.listByBooking(id!),
-    enabled: !!id,
-  });
 
   if (!id) {
     navigate("/admin/bookings");
     return null;
   }
 
-  if (detailLoading || inspectionsLoading) {
-    return (
-      <div className="p-6 space-y-4">
-        <Skeleton className="h-8 w-40" />
-        <Skeleton className="h-56 w-full rounded-2xl" />
-        <div className="grid grid-cols-2 gap-4">
-          <Skeleton className="h-48 w-full rounded-2xl" />
-          <Skeleton className="h-48 w-full rounded-2xl" />
-        </div>
-      </div>
-    );
+  if (detailLoading) {
+    return <AdminBookingDetailSkeleton />;
   }
 
   if (!detail) {
@@ -136,6 +121,7 @@ export default function AdminBookingDetailPage() {
     billSummary,
     securityDeposit,
   } = detail;
+  const inspections = detail.inspections ?? booking.inspections ?? [];
   const resolvedBillSummary = billSummary ?? computeBillSummary(billEntries);
 
   const carImg = carPrimaryImage(car, car ? CAR_IMAGES[car.category] : "");
@@ -145,7 +131,7 @@ export default function AdminBookingDetailPage() {
   const extraDriverNames = booking.extraDriverNames ?? [];
 
   return (
-    <div className="p-4 sm:p-6 max-w-6xl pb-16 md:pb-12 overflow-x-hidden">
+    <div className="px-2.5 py-3 sm:p-6 max-w-6xl pb-16 md:pb-12 overflow-x-hidden">
       <motion.div
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
@@ -187,7 +173,7 @@ export default function AdminBookingDetailPage() {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.05 }}
-        className="space-y-6 md:space-y-5"
+        className="space-y-3.5 md:space-y-5"
       >
         {car && (
           <BookingVehicleCard
@@ -343,7 +329,7 @@ export default function AdminBookingDetailPage() {
               <>
                 <div className="grid grid-cols-1 gap-3">
                   {services.map((svc) => (
-                    <div key={svc._id} className="flex items-center justify-between bg-muted/30 rounded-xl px-4 py-3 border border-border/30">
+                    <div key={svc._id} className="flex items-center justify-between bg-muted/30 rounded-xl px-3 py-2.5 border border-border/30">
                       <div>
                         <p className="text-sm font-medium">{svc.name}</p>
                         <p className="text-xs text-muted-foreground capitalize">
@@ -431,7 +417,6 @@ export default function AdminBookingDetailPage() {
           onOpenChange={setEditOpen}
           onSuccess={() => {
             queryClient.invalidateQueries({ queryKey: ["bookings", id, "detail"] });
-            queryClient.invalidateQueries({ queryKey: ["inspections", id] });
           }}
         />
       )}

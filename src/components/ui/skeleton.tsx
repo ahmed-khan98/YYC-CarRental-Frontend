@@ -5,7 +5,8 @@ function Skeleton({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="skeleton"
       className={cn(
-        "bg-muted-foreground/10 rounded-md opacity-0 animate-[fade-in_1s_ease-in-out_1s_forwards,pulse_2s_ease-in-out_1s_infinite]",
+        "rounded-md bg-[length:200%_100%] animate-[skeleton-shimmer_1.5s_ease-in-out_infinite]",
+        "bg-[linear-gradient(90deg,var(--muted)_0%,color-mix(in_oklab,var(--foreground)_9%,var(--muted))_50%,var(--muted)_100%)]",
         className,
       )}
       {...props}

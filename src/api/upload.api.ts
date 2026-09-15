@@ -1,6 +1,6 @@
 import axios from "axios";
 import { compressImageForUpload } from "@/lib/compressImage.ts";
-import { mediaKindFromFile, resolveMediaUrl } from "@/lib/mediaUrl.ts";
+import { mediaKindFromFile, persistBrowserFile, resolveMediaUrl } from "@/lib/mediaUrl.ts";
 import { isMobileBrowser } from "@/lib/openPdf.ts";
 import { apiClient } from "./client.ts";
 
@@ -13,6 +13,20 @@ export type FileUploadProgress = {
   fileCount: number;
   percent: number;
 };
+
+async function withUploadWakeLock<T>(run: () => Promise<T>): Promise<T> {
+  let lock: WakeLockSentinel | null = null;
+  try {
+    lock = (await navigator.wakeLock?.request("screen")) ?? null;
+  } catch {
+    // Older phones may not support keeping the screen awake.
+  }
+  try {
+    return await run();
+  } finally {
+    await lock?.release().catch(() => {});
+  }
+}
 
 async function sleep(ms: number) {
   await new Promise((resolve) => window.setTimeout(resolve, ms));
@@ -174,9 +188,12 @@ export async function uploadFile(
   folder?: string,
   onProgress?: (progress: FileUploadProgress) => void,
 ): Promise<string> {
-  const prepared = mediaKindFromFile(file) === "video" ? file : await prepareImage(file);
-  const report = (percent: number) => onProgress?.({ fileIndex: 1, fileCount: 1, percent });
-  return uploadPrepared(prepared, folder, report);
+  return withUploadWakeLock(async () => {
+    const stable = persistBrowserFile(file);
+    const prepared = mediaKindFromFile(stable) === "image" ? await prepareImage(stable) : stable;
+    const report = (percent: number) => onProgress?.({ fileIndex: 1, fileCount: 1, percent });
+    return uploadPrepared(prepared, folder, report);
+  });
 }
 
 export async function uploadFiles(

@@ -1,7 +1,6 @@
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { bookingsApi } from "@/api/bookings.api.ts";
-import { inspectionsApi } from "@/api/inspections.api.ts";
 import { Authenticated, Unauthenticated, AuthLoading } from "@/components/auth-gate.tsx";
 import Navbar from "@/components/navbar.tsx";
 import Footer from "@/components/footer.tsx";
@@ -16,7 +15,7 @@ import {
   InfoRow,
   SectionTitle,
 } from "@/components/booking-detail-ui.tsx";
-import { Skeleton } from "@/components/ui/skeleton.tsx";
+import { CustomerBookingDetailSkeleton } from "@/components/page-skeleton.tsx";
 import { SignInButton } from "@/components/ui/signin.tsx";
 import { motion } from "motion/react";
 import { format } from "date-fns";
@@ -66,29 +65,16 @@ const CAR_IMAGES: Record<string, string> = {
 
 function BookingDetailInner({ bookingId }: { bookingId: string }) {
   const navigate = useNavigate();
-  const { data: detail, isLoading: detailLoading } = useQuery({
+  const { data: detail, isPending, isError } = useQuery({
     queryKey: ["bookings", bookingId, "detail"],
     queryFn: () => bookingsApi.getDetailById(bookingId),
   });
-  const { data: inspections, isLoading: inspectionsLoading } = useQuery({
-    queryKey: ["inspections", bookingId],
-    queryFn: () => inspectionsApi.listByBooking(bookingId),
-  });
 
-  if (detailLoading || inspectionsLoading) {
-    return (
-      <div className="mx-auto max-w-3xl px-4 sm:px-6 py-8 space-y-4">
-        <Skeleton className="h-8 w-48" />
-        <Skeleton className="h-64 w-full rounded-2xl" />
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <Skeleton className="h-48 w-full rounded-2xl" />
-          <Skeleton className="h-48 w-full rounded-2xl" />
-        </div>
-      </div>
-    );
+  if (isPending || (!detail && !isError)) {
+    return <CustomerBookingDetailSkeleton />;
   }
 
-  if (!detail) {
+  if (isError || !detail) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
         <AlertCircle className="h-12 w-12 text-muted-foreground" />
@@ -114,6 +100,7 @@ function BookingDetailInner({ bookingId }: { bookingId: string }) {
     billEntries = [],
     billSummary,
   } = detail;
+  const inspections = detail.inspections ?? booking.inspections ?? [];
   const resolvedBillSummary = billSummary ?? computeBillSummary(billEntries);
 
   const carImg = carPrimaryImage(car, car ? CAR_IMAGES[car.category] : "");
@@ -124,7 +111,7 @@ function BookingDetailInner({ bookingId }: { bookingId: string }) {
   const extraDriverNames = booking.extraDriverNames ?? [];
 
   return (
-    <div className="mx-auto max-w-3xl px-4 sm:px-6 py-6 sm:py-8">
+    <div className="mx-auto max-w-3xl px-2.5 sm:px-6 py-5 sm:py-8">
       <motion.div
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
@@ -363,14 +350,7 @@ export default function BookingDetailPage() {
       <Navbar />
       <div className="pt-[4.5rem] flex-1">
         <AuthLoading>
-          <div className="mx-auto max-w-3xl px-4 py-8 space-y-4">
-            <Skeleton className="h-8 w-40" />
-            <Skeleton className="h-56 w-full rounded-2xl" />
-            <div className="grid grid-cols-2 gap-4">
-              <Skeleton className="h-48 w-full rounded-2xl" />
-              <Skeleton className="h-48 w-full rounded-2xl" />
-            </div>
-          </div>
+          <CustomerBookingDetailSkeleton />
         </AuthLoading>
         <Unauthenticated>
           <div className="flex items-center justify-center min-h-[60vh]">

@@ -1,6 +1,6 @@
 import { openPdfAfterFetch } from "@/lib/openPdf.ts";
 import { API_BASE, apiClient, getStoredToken } from "./client.ts";
-import type { ExtraDriverCheckInDetail, FuelLevel, InspectionType, MainDriverCheckInDetail, VehicleInspection } from "@/types/index.ts";
+import type { Booking, ExtraDriverCheckInDetail, FuelLevel, InspectionType, MainDriverCheckInDetail, VehicleInspection } from "@/types/index.ts";
 import type { ExtraMileageBilling } from "@/lib/extraMileage.ts";
 
 export type InspectionCreateResult = VehicleInspection & {
@@ -109,6 +109,14 @@ export const inspectionsApi = {
   },
   adminList: async () => {
     const res = await apiClient.get<VehicleInspection[]>("/inspections/admin");
+    return res.data;
+  },
+  checkInOutBoard: async () => {
+    const res = await apiClient.get<Booking[]>("/inspections/check-in-out");
+    return res.data;
+  },
+  getById: async (inspectionId: string) => {
+    const res = await apiClient.get<VehicleInspection>(`/inspections/${inspectionId}`);
     return res.data;
   },
 };

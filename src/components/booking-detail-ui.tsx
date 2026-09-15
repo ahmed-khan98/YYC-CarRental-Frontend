@@ -22,7 +22,7 @@ export function BookingDetailCard({
 }
 
 export function BookingDetailCardHeader({ children }: { children: ReactNode }) {
-  return <CardHeader className="pb-2 pt-5 px-4 sm:pt-4 sm:px-5">{children}</CardHeader>;
+  return <CardHeader className="px-3 pb-2 pt-3.5 sm:px-5 sm:pt-4">{children}</CardHeader>;
 }
 
 export function BookingDetailCardContent({
@@ -32,7 +32,7 @@ export function BookingDetailCardContent({
   children: ReactNode;
   className?: string;
 }) {
-  return <CardContent className={cn("px-4 pb-5 pt-0 sm:px-5", className)}>{children}</CardContent>;
+  return <CardContent className={cn("px-3 pb-3.5 pt-0 sm:px-5 sm:pb-5", className)}>{children}</CardContent>;
 }
 
 export function SectionTitle({ icon, title }: { icon: ReactNode; title: string }) {
@@ -46,9 +46,9 @@ export function SectionTitle({ icon, title }: { icon: ReactNode; title: string }
 
 export function InfoRow({ label, value }: { label: string; value: ReactNode }) {
   return (
-    <div className="flex justify-between items-start gap-4 py-3 sm:py-2.5 border-b border-border/30 last:border-0">
-      <span className="text-sm text-muted-foreground shrink-0">{label}</span>
-      <span className="text-sm font-medium text-right">{value}</span>
+    <div className="flex justify-between items-start gap-3 py-2 sm:gap-4 sm:py-2.5 border-b border-border/30 last:border-0">
+      <span className="text-[13px] sm:text-sm text-muted-foreground shrink-0 max-w-[46%]">{label}</span>
+      <span className="min-w-0 text-[13px] sm:text-sm font-medium text-right break-words">{value}</span>
     </div>
   );
 }
@@ -64,7 +64,7 @@ export function BookingVehicleCard({
 }) {
   return (
     <BookingDetailCard>
-      <CardContent className="p-4 sm:p-3">
+      <CardContent className="p-3">
         <div className="flex items-start gap-3">
           {imageUrl ? (
             <img

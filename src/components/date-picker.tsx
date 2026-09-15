@@ -156,7 +156,7 @@ export function DatePicker({
             "flex w-full items-center gap-2 text-left text-sm outline-none",
             triggerClassName ??
               "h-10 min-h-10 rounded-md border border-input bg-background px-3 shadow-xs transition-colors hover:bg-accent/30 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50",
-            !triggerClassName && !value && "text-muted-foreground",
+            !value && "text-muted-foreground",
             className,
           )}
         >

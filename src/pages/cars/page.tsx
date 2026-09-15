@@ -2,7 +2,6 @@ import { memo, useCallback, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { carsApi } from "@/api/cars.api.ts";
-import { bookingsApi } from "@/api/bookings.api.ts";
 import Navbar from "@/components/navbar.tsx";
 import Footer from "@/components/footer.tsx";
 import { Button } from "@/components/ui/button.tsx";
@@ -42,7 +41,7 @@ const today = format(new Date(), "yyyy-MM-dd");
 const tomorrow = format(new Date(Date.now() + 86400000), "yyyy-MM-dd");
 
 const browseDateFieldClass =
-  "h-10 min-h-10 rounded-md border border-input bg-background px-3 text-sm shadow-xs transition-colors hover:bg-accent/30 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50";
+  "h-9 min-h-9 rounded-md border border-border/70 bg-background px-2.5 text-[13px] shadow-none transition-colors hover:bg-muted/40 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50";
 
 const CarsFiltersPanel = memo(function CarsFiltersPanel({
   transmission,
@@ -64,8 +63,8 @@ const CarsFiltersPanel = memo(function CarsFiltersPanel({
   onClearFilters: () => void;
 }) {
   return (
-    <div className="mb-5 rounded-xl border border-border/50 bg-card px-4 pb-4 pt-2 sm:mb-6">
-      <div className="mb-3 flex min-h-8 items-center justify-between gap-3">
+    <div className="mb-5 rounded-xl border border-border/50 bg-card px-4 py-2 sm:mb-6">
+      <div className="mb-1.5 flex items-center justify-between gap-3">
         <h3 className="font-semibold text-sm">Filters</h3>
         <button
           type="button"
@@ -208,20 +207,22 @@ export default function CarsPage() {
   const hasDateFilter = Boolean(pickupDate && dropoffDate);
 
   const { data: carsRaw, isLoading: carsLoading } = useQuery({
-    queryKey: ["cars"],
-    queryFn: () => carsApi.list(),
+    queryKey: hasDateFilter
+      ? ["cars", "available", pickupDate, pickupTime, dropoffDate, dropoffTime]
+      : ["cars"],
+    queryFn: () =>
+      hasDateFilter
+        ? carsApi.listAvailable({
+            pickupDate,
+            returnDate: dropoffDate,
+            pickupTime,
+            returnTime: dropoffTime,
+          })
+        : carsApi.list(),
   });
-  const { data: unavailableIds, isLoading: unavailableLoading } = useQuery({
-    queryKey: ["bookings", "unavailable", pickupDate, pickupTime, dropoffDate, dropoffTime],
-    queryFn: () => bookingsApi.getUnavailableCarIds(pickupDate, dropoffDate, pickupTime, dropoffTime),
-    enabled: hasDateFilter,
-  });
-
-  const unavailableSet = useMemo(() => new Set(unavailableIds ?? []), [unavailableIds]);
 
   const filtered = useMemo(() => (carsRaw ?? []).filter((car) => {
     if (!isCustomerVisibleVehicle(car.category)) return false;
-    if (hasDateFilter && unavailableSet.has(car._id)) return false;
     if (category !== "all" && car.category !== category) return false;
     if (transmission !== "all" && car.transmission !== transmission) return false;
     if (fuelType !== "all" && car.fuelType !== fuelType) return false;
@@ -231,7 +232,7 @@ export default function CarsPage() {
     if (sortBy === "price_asc") return a.dailyRate - b.dailyRate;
     if (sortBy === "price_desc") return b.dailyRate - a.dailyRate;
     return 0;
-  }), [carsRaw, hasDateFilter, unavailableSet, category, transmission, fuelType, maxPrice, sortBy]);
+  }), [carsRaw, category, transmission, fuelType, maxPrice, sortBy]);
 
   const clearDates = () => {
     setPickupDate("");
@@ -254,7 +255,8 @@ export default function CarsPage() {
     setSortBy("default");
   };
 
-  const hasFilters = category !== "all" || transmission !== "all" || fuelType !== "all" || maxPrice[0] < 500 || sortBy !== "default";
+  const hasPanelFilters = transmission !== "all" || fuelType !== "all" || maxPrice[0] < 500;
+  const hasFilters = hasPanelFilters || category !== "all" || sortBy !== "default";
 
   const handleBookNow = useCallback(() => {
     navigate("/contact");
@@ -264,7 +266,7 @@ export default function CarsPage() {
     navigate(`/cars/${carId}`);
   }, [navigate]);
 
-  const isLoading = carsLoading || (hasDateFilter && unavailableLoading);
+  const isLoading = carsLoading;
 
   const availabilityLabel = hasDateFilter
     ? `${filtered.length} car${filtered.length !== 1 ? "s" : ""} available for selected dates`
@@ -274,18 +276,18 @@ export default function CarsPage() {
       <Navbar />
       <div className="pt-16">
         {/* Header */}
-        <div className="border-b border-border/50 bg-card/30 py-4 sm:py-6">
-          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+        <div className="border-b border-border/50 bg-card/30 py-3 sm:py-4">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 space-y-3">
+            <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
-                <h1 className="text-2xl font-bold sm:text-3xl">Browse Cars</h1>
-                <p className="mt-1 min-h-5 text-sm text-muted-foreground sm:text-base">
+                <h1 className="text-xl font-bold sm:text-2xl">Browse Cars</h1>
+                <p className="mt-0.5 truncate text-xs text-muted-foreground sm:text-sm">
                   {isLoading ? "Loading..." : availabilityLabel}
                 </p>
               </div>
-              <div className="flex w-full shrink-0 items-center gap-2 sm:w-auto sm:gap-3">
+              <div className="flex shrink-0 items-center gap-2">
                 <Select value={sortBy} onValueChange={setSortBy}>
-                  <SelectTrigger className="h-10 flex-1 sm:w-40">
+                  <SelectTrigger className="h-9 w-[8.5rem] sm:w-40">
                     <SelectValue placeholder="Sort by" />
                   </SelectTrigger>
                   <SelectContent>
@@ -295,109 +297,92 @@ export default function CarsPage() {
                   </SelectContent>
                 </Select>
                 <Button
-                  variant={showFilters ? "default" : "secondary"}
+                  variant={showFilters ? "default" : "outline"}
                   onClick={() => setShowFilters(!showFilters)}
-                  className="h-10 shrink-0 cursor-pointer gap-2 px-3 sm:px-4"
+                  className="h-9 shrink-0 cursor-pointer gap-1.5 px-2.5 sm:px-3"
                 >
-                  <SlidersHorizontal className="h-4 w-4" />
-                  Filters
-                  <Badge
-                    aria-hidden={!hasFilters}
-                    className={cn(
-                      "ml-0.5 flex h-4 w-4 items-center justify-center p-0 text-[10px]",
-                      !hasFilters && "invisible",
-                    )}
-                  >
-                    !
-                  </Badge>
+                  <SlidersHorizontal className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">Filters</span>
+                  {hasPanelFilters && (
+                    <span className="h-1.5 w-1.5 rounded-full bg-primary-foreground sm:bg-primary" />
+                  )}
                 </Button>
               </div>
             </div>
 
-            {/* Availability dates */}
-            <div className="mt-3 w-full rounded-lg border border-border/60 bg-background px-3 pb-3 pt-1.5 shadow-sm sm:mt-4 sm:flex sm:items-end sm:gap-3 sm:px-3 sm:py-2">
-              <div className="grid min-w-0 flex-1 grid-cols-2 gap-2 sm:gap-3">
-                <div className="min-w-0 space-y-1">
-                  <label className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                    Pickup
-                  </label>
-                  <DatePicker
-                    value={pickupDate}
-                    minDate={today}
-                    label="Pick up"
-                    selectedHint="Pick up"
-                    onChange={(date) => {
-                      setPickupDate(date);
-                      if (dropoffDate && dropoffDate < date) setDropoffDate(date);
-                      setSearchParams((prev) => {
-                        const next = new URLSearchParams(prev);
-                        next.set("pickupDate", date);
-                        if (dropoffDate && dropoffDate < date) next.set("dropoffDate", date);
-                        return next;
-                      }, { replace: true });
-                    }}
-                    className="w-full min-w-0"
-                    triggerClassName={browseDateFieldClass}
-                    align="start"
-                    placeholder="Pickup date"
-                  />
-                </div>
-                <div className="min-w-0 space-y-1">
-                  <label className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                    Drop-off
-                  </label>
-                  <DatePicker
-                    value={dropoffDate}
-                    minDate={pickupDate || today}
-                    label="Drop-off"
-                    selectedHint="Drop-off"
-                    onChange={(date) => {
-                      setDropoffDate(date);
-                      setSearchParams((prev) => {
-                        const next = new URLSearchParams(prev);
-                        next.set("dropoffDate", date);
-                        return next;
-                      }, { replace: true });
-                    }}
-                    className="w-full min-w-0"
-                    triggerClassName={browseDateFieldClass}
-                    align="start"
-                    placeholder="Drop-off date"
-                  />
-                </div>
-              </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <DatePicker
+                value={pickupDate}
+                minDate={today}
+                label="Pick up"
+                selectedHint="Pick up"
+                onChange={(date) => {
+                  setPickupDate(date);
+                  if (dropoffDate && dropoffDate < date) setDropoffDate(date);
+                  setSearchParams((prev) => {
+                    const next = new URLSearchParams(prev);
+                    next.set("pickupDate", date);
+                    if (dropoffDate && dropoffDate < date) next.set("dropoffDate", date);
+                    return next;
+                  }, { replace: true });
+                }}
+                className="min-w-0 flex-1 sm:w-40 sm:flex-none"
+                triggerClassName={browseDateFieldClass}
+                align="start"
+                placeholder="Pickup"
+              />
+              <DatePicker
+                value={dropoffDate}
+                minDate={pickupDate || today}
+                label="Drop-off"
+                selectedHint="Drop-off"
+                onChange={(date) => {
+                  setDropoffDate(date);
+                  setSearchParams((prev) => {
+                    const next = new URLSearchParams(prev);
+                    next.set("dropoffDate", date);
+                    return next;
+                  }, { replace: true });
+                }}
+                className="min-w-0 flex-1 sm:w-40 sm:flex-none"
+                triggerClassName={browseDateFieldClass}
+                align="start"
+                placeholder="Drop-off"
+              />
               {hasDateFilter && (
                 <Button
                   variant="ghost"
                   size="sm"
                   onClick={clearDates}
-                  className="mt-2 h-10 shrink-0 cursor-pointer px-2 text-xs text-muted-foreground hover:text-foreground sm:mt-0"
+                  className="h-9 shrink-0 cursor-pointer px-2 text-xs text-muted-foreground hover:text-foreground"
                 >
-                  <X className="mr-1 h-3.5 w-3.5" />
-                  Clear
+                  <X className="h-3.5 w-3.5" />
+                  <span className="sr-only">Clear dates</span>
                 </Button>
               )}
+              <div className="hidden h-5 w-px bg-border sm:block" />
+              <div className="inline-flex h-9 items-center rounded-md border border-border/70 bg-background p-0.5">
+                {CATEGORIES.map((cat) => (
+                  <button
+                    key={cat}
+                    type="button"
+                    onClick={() => setCategory(cat)}
+                    className={cn(
+                      "h-8 shrink-0 cursor-pointer rounded-[5px] px-2.5 text-xs font-medium transition-colors",
+                      category === cat
+                        ? "bg-primary text-primary-foreground"
+                        : "text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    {formatVehicleCategoryLabel(cat)}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
         </div>
 
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
-          {/* Category Tabs */}
-          <div className="-mx-4 mb-5 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0">
-            {CATEGORIES.map((cat) => (
-              <button
-                key={cat}
-                onClick={() => setCategory(cat)}
-                className={`shrink-0 rounded-full border px-4 py-2 text-sm font-medium capitalize transition-all cursor-pointer ${
-                  category === cat
-                    ? "border-primary bg-primary text-primary-foreground shadow-sm"
-                    : "border-border bg-background text-muted-foreground hover:border-primary/50 hover:text-foreground"
-                }`}
-              >
-                {formatVehicleCategoryLabel(cat)}
-              </button>
-            ))}
-          </div>
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-5 sm:py-6">
 
           {/* Filters Panel */}
           {showFilters && (

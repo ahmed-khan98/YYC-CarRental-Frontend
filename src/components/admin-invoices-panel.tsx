@@ -53,11 +53,11 @@ export function AdminInvoicesPanel({ bookingId, billEntries }: AdminInvoicesPane
       <BookingDetailCardHeader>
         <SectionTitle icon={<Receipt className="h-4 w-4" />} title="Invoices" />
       </BookingDetailCardHeader>
-      <BookingDetailCardContent className="space-y-3">
-        <p className="text-xs text-muted-foreground">
+      <BookingDetailCardContent className="space-y-2.5">
+        <p className="text-xs text-muted-foreground leading-snug">
           Rental and additional services are on the check-in / check-out agreement. Invoices are only for billing entries you add or update.
         </p>
-        <div className="space-y-2">
+        <div className="space-y-1.5">
           {invoices.length === 0 && (
             <p className="text-sm text-muted-foreground py-2">No invoices on this booking yet.</p>
           )}
@@ -66,19 +66,23 @@ export function AdminInvoicesPanel({ bookingId, billEntries }: AdminInvoicesPane
             return (
               <div
                 key={invoice.key}
-                className="flex items-start justify-between gap-2 rounded-lg border border-border/40 bg-muted/20 px-3 py-2"
+                className="flex items-center gap-2 rounded-lg border border-border/40 bg-muted/20 px-2.5 py-2"
               >
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-sm font-medium">{invoice.title}</span>
-                    <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <span className="text-sm font-semibold truncate">{invoice.title}</span>
+                    <span className="text-[10px] uppercase tracking-wide text-muted-foreground shrink-0">
                       {invoiceKindLabel(invoice)}
                     </span>
                   </div>
-                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                  <p className="text-[11px] text-muted-foreground truncate">
                     {invoice.invoiceNumber}
-                    {invoice.lineLabels.length > 0 ? ` · ${invoice.lineLabels.join(", ")}` : ""}
                   </p>
+                  {invoice.lineLabels.length > 0 && (
+                    <p className="text-[11px] text-muted-foreground leading-snug break-words">
+                      {invoice.lineLabels.join(", ")}
+                    </p>
+                  )}
                 </div>
                 <Hint label={`Download ${invoice.title}`}>
                   <span className="inline-flex">
@@ -86,7 +90,7 @@ export function AdminInvoicesPanel({ bookingId, billEntries }: AdminInvoicesPane
                       type="button"
                       variant="ghost"
                       size="icon"
-                      className="h-7 w-7 shrink-0 text-muted-foreground hover:text-primary cursor-pointer"
+                      className="h-8 w-8 shrink-0 text-muted-foreground hover:text-primary cursor-pointer"
                       aria-label={`Download ${invoice.title}`}
                       disabled={loading || (!invoice.entryId && invoice.kind !== "full")}
                       aria-busy={loading}

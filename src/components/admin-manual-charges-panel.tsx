@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { bookingsApi } from "@/api/bookings.api.ts";
 import type { BillEntry, BillEntryStatus, BillPaidVia, SecurityDepositSummary } from "@/types/index.ts";
@@ -45,7 +45,8 @@ import { getApiErrorMessage } from "@/api/client.ts";
 import { Plus, Trash2, DollarSign, CreditCard, FilePlus, Pencil, Paperclip } from "lucide-react";
 import { BookingActorValue } from "@/components/booking-actor-value.tsx";
 import { actorFromBillEntry } from "@/lib/bookingActor.ts";
-import { resolveMediaUrl } from "@/lib/mediaUrl.ts";
+import { persistBrowserFile, resolveMediaUrl } from "@/lib/mediaUrl.ts";
+import { UploadProgressStatus } from "@/components/upload-progress.tsx";
 import { Hint } from "@/components/ui/tooltip.tsx";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group.tsx";
 import { cn } from "@/lib/utils.ts";
@@ -169,6 +170,27 @@ function PaidViaBadge({ paidVia }: { paidVia?: BillPaidVia }) {
   );
 }
 
+function FinanceCard({
+  children,
+  tone = "neutral",
+}: {
+  children: ReactNode;
+  tone?: "neutral" | "payment";
+}) {
+  return (
+    <div
+      className={cn(
+        "rounded-lg border p-2.5 space-y-1.5",
+        tone === "payment"
+          ? "border-green-500/20 bg-green-500/5"
+          : "border-border/40 bg-muted/20",
+      )}
+    >
+      {children}
+    </div>
+  );
+}
+
 export function AdminManualChargesPanel({
   bookingId,
   billEntries,
@@ -192,6 +214,7 @@ export function AdminManualChargesPanel({
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
   const [payTarget, setPayTarget] = useState<BillEntry | null>(null);
   const [payVia, setPayVia] = useState<BillPaidVia>("e_transfer");
+  const [uploadPercent, setUploadPercent] = useState<number | null>(null);
 
   const extraMileageCharges = billEntries.filter(isExtraMileageCharge);
   const checkoutPaymentCollected = hasCheckOutPayment(billEntries);
@@ -212,6 +235,7 @@ export function AdminManualChargesPanel({
         entryType: "charge",
         paidVia: newPaidVia,
         attachment,
+        onUploadProgress: (progress) => setUploadPercent(progress.percent),
       }),
     onSuccess: () => {
       toast.success("Charge added");
@@ -220,10 +244,14 @@ export function AdminManualChargesPanel({
       setAmount("");
       setNewPaidVia("e_transfer");
       setAttachment(null);
+      setUploadPercent(null);
       setShowAddForm(false);
       invalidate();
     },
-    onError: (err) => toast.error(getApiErrorMessage(err)),
+    onError: (err) => {
+      setUploadPercent(null);
+      toast.error(getApiErrorMessage(err));
+    },
   });
 
   const updateEntryStatus = useMutation({
@@ -315,6 +343,7 @@ export function AdminManualChargesPanel({
     setAmount("");
     setNewPaidVia("e_transfer");
     setAttachment(null);
+    setUploadPercent(null);
     setShowAddForm(false);
   };
 
@@ -373,8 +402,8 @@ export function AdminManualChargesPanel({
       <BookingDetailCardHeader>
         <SectionTitle icon={<FilePlus className="h-4 w-4" />} title="Additional Charges" />
       </BookingDetailCardHeader>
-      <BookingDetailCardContent className="space-y-4">
-        <p className="text-xs text-muted-foreground">
+      <BookingDetailCardContent className="space-y-3">
+        <p className="text-xs text-muted-foreground leading-snug">
           Every new charge emails the customer an invoice. Pre-authorized charges are paid from the security deposit; e-transfer charges stay unpaid until you mark them paid.
         </p>
 
@@ -388,30 +417,27 @@ export function AdminManualChargesPanel({
                 entry.status === "paid" || checkoutPaymentCollected ? "paid" : entry.status;
 
               return (
-                <div
-                  key={entry._id}
-                  className="flex items-start justify-between gap-2 rounded-lg border border-border/40 bg-muted/20 px-3 py-2"
-                >
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-sm font-medium">{entry.title}</span>
-                      <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                        On Check-Out Invoice
-                      </span>
+                <FinanceCard key={entry._id}>
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold leading-snug break-words">{entry.title}</p>
+                      <div className="mt-1 flex flex-wrap items-center gap-1">
+                        <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                          On check-out invoice
+                        </span>
+                        <BillEntryStatusBadge status={displayStatus} />
+                      </div>
                     </div>
-                    {entry.description && (
-                      <p className="text-xs text-muted-foreground mt-0.5">{entry.description}</p>
-                    )}
-                    <p className="text-[11px] text-muted-foreground mt-1">
-                      Subtotal {formatMoney(entry.amount)} + tax {formatMoney(taxAmount)} ={" "}
-                      <span className="font-medium text-foreground">{formatMoney(totalDue)} due</span>
-                    </p>
+                    <p className="text-sm font-semibold tabular-nums shrink-0">{formatMoney(totalDue)}</p>
                   </div>
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <span className="text-sm font-semibold tabular-nums mr-1">{formatMoney(totalDue)}</span>
-                    <BillEntryStatusBadge status={displayStatus} />
-                  </div>
-                </div>
+                  {entry.description && (
+                    <p className="text-xs text-muted-foreground leading-snug break-words">{entry.description}</p>
+                  )}
+                  <p className="text-[11px] text-muted-foreground">
+                    Subtotal {formatMoney(entry.amount)} + tax {formatMoney(taxAmount)} ={" "}
+                    <span className="font-medium text-foreground">{formatMoney(totalDue)} due</span>
+                  </p>
+                </FinanceCard>
               );
             })}
           </div>
@@ -523,57 +549,54 @@ export function AdminManualChargesPanel({
               }
 
               return (
-                <div
-                  key={entry._id}
-                  className="flex items-start justify-between gap-2 rounded-lg border border-border/40 bg-muted/20 px-3 py-2"
-                >
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-sm font-medium">{entry.title}</span>
-                      {resolveEntryPhase(entry) === "check_out" && (
-                        <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                          On Check-Out Invoice
-                        </span>
-                      )}
-                      <PaidViaBadge paidVia={entry.paidVia} />
-                    </div>
-                    {entry.description && (
-                      <p className="text-xs text-muted-foreground mt-0.5">{entry.description}</p>
-                    )}
-                    {actor && (
-                      <div className="mt-1">
-                        <BookingActorValue
-                          actor={actor}
-                          compact
-                          className="items-start text-left"
-                        />
+                <FinanceCard key={entry._id}>
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold leading-snug break-words">{entry.title}</p>
+                      <div className="mt-1 flex flex-wrap items-center gap-1">
+                        {resolveEntryPhase(entry) === "check_out" && (
+                          <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                            On check-out invoice
+                          </span>
+                        )}
+                        <PaidViaBadge paidVia={entry.paidVia} />
                       </div>
-                    )}
-                    {entry.attachmentUrl && (
-                      <a
-                        href={resolveMediaUrl(entry.attachmentUrl)}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 text-[11px] text-primary mt-1 hover:underline"
-                      >
-                        <Paperclip className="h-3 w-3" />
-                        {entry.attachmentName || "Attachment"}
-                      </a>
-                    )}
-                    <p className="text-[11px] text-muted-foreground mt-1">
-                      Subtotal {formatMoney(entry.amount)} + tax {formatMoney(taxAmount)} ={" "}
-                      <span className="font-medium text-foreground">{formatMoney(totalDue)} due</span>
-                    </p>
+                    </div>
+                    <p className="text-sm font-semibold tabular-nums shrink-0">{formatMoney(totalDue)}</p>
                   </div>
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <span className="text-sm font-semibold tabular-nums mr-1">{formatMoney(totalDue)}</span>
+                  {entry.description && (
+                    <p className="text-xs text-muted-foreground leading-snug break-words">{entry.description}</p>
+                  )}
+                  {actor && (
+                    <BookingActorValue
+                      actor={actor}
+                      compact
+                      className="items-start text-left"
+                    />
+                  )}
+                  {entry.attachmentUrl && (
+                    <a
+                      href={resolveMediaUrl(entry.attachmentUrl)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-[11px] text-primary hover:underline"
+                    >
+                      <Paperclip className="h-3 w-3" />
+                      {entry.attachmentName || "Attachment"}
+                    </a>
+                  )}
+                  <p className="text-[11px] text-muted-foreground">
+                    Subtotal {formatMoney(entry.amount)} + tax {formatMoney(taxAmount)} ={" "}
+                    <span className="font-medium text-foreground">{formatMoney(totalDue)} due</span>
+                  </p>
+                  <div className="flex items-center justify-end gap-0.5 pt-0.5">
                     {renderStatusControl(entry)}
                     <Hint label="Edit charge">
                       <Button
                         type="button"
                         variant="ghost"
                         size="icon"
-                        className="h-7 w-7 text-muted-foreground hover:text-foreground cursor-pointer"
+                        className="h-8 w-8 text-muted-foreground hover:text-foreground cursor-pointer"
                         aria-label="Edit charge"
                         onClick={() => startEditing(entry)}
                       >
@@ -586,7 +609,7 @@ export function AdminManualChargesPanel({
                         type="button"
                         variant="ghost"
                         size="icon"
-                        className="h-7 w-7 text-muted-foreground hover:text-destructive cursor-pointer"
+                        className="h-8 w-8 text-muted-foreground hover:text-destructive cursor-pointer"
                         aria-label="Delete charge"
                         onClick={() =>
                           setDeleteTarget({ id: entry._id, title: entry.title, type: "charge" })
@@ -597,7 +620,7 @@ export function AdminManualChargesPanel({
                     </Hint>
                     )}
                   </div>
-                </div>
+                </FinanceCard>
               );
             })}
           </div>
@@ -609,31 +632,30 @@ export function AdminManualChargesPanel({
               Payment Records
             </p>
             {payments.map((entry) => (
-              <div
-                key={entry._id}
-                className="flex items-start justify-between gap-2 rounded-lg border border-green-500/20 bg-green-500/5 px-3 py-2"
-              >
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <CreditCard className="h-3.5 w-3.5 text-green-600 shrink-0" />
-                    <span className="text-sm font-medium">{entry.title}</span>
-                    <span className="inline-flex items-center rounded-full border border-green-200 bg-green-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-green-800">
+              <FinanceCard key={entry._id} tone="payment">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold leading-snug break-words flex items-center gap-1.5">
+                      <CreditCard className="h-3.5 w-3.5 text-green-600 shrink-0" />
+                      {entry.title}
+                    </p>
+                    <span className="mt-1 inline-flex items-center rounded-full border border-green-200 bg-green-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-green-800">
                       Payment
                     </span>
                   </div>
-                  {entry.description && (
-                    <p className="text-xs text-muted-foreground mt-0.5 ml-5">{entry.description}</p>
-                  )}
-                </div>
-                <div className="flex items-center gap-1.5 shrink-0">
-                  <span
-                    className={`text-sm font-semibold tabular-nums mr-1 ${
+                  <p
+                    className={`text-sm font-semibold tabular-nums shrink-0 ${
                       entry.status === "refund" ? "text-blue-600" : "text-green-600"
                     }`}
                   >
                     {entry.status === "refund" ? "+" : "−"}
                     {formatMoney(entry.amount)}
-                  </span>
+                  </p>
+                </div>
+                {entry.description && (
+                  <p className="text-xs text-muted-foreground leading-snug break-words">{entry.description}</p>
+                )}
+                <div className="flex items-center justify-end gap-0.5 pt-0.5">
                   {renderStatusControl(entry)}
                   {canDelete && (
                   <Hint label="Delete payment">
@@ -641,7 +663,7 @@ export function AdminManualChargesPanel({
                       type="button"
                       variant="ghost"
                       size="icon"
-                      className="h-7 w-7 text-muted-foreground hover:text-destructive cursor-pointer"
+                      className="h-8 w-8 text-muted-foreground hover:text-destructive cursor-pointer"
                       aria-label="Delete payment"
                       onClick={() =>
                         setDeleteTarget({ id: entry._id, title: entry.title, type: "payment" })
@@ -652,7 +674,7 @@ export function AdminManualChargesPanel({
                   </Hint>
                   )}
                 </div>
-              </div>
+              </FinanceCard>
             ))}
           </div>
         )}
@@ -672,7 +694,7 @@ export function AdminManualChargesPanel({
             Add charge (e.g. traffic violation)
           </Button>
         ) : (
-          <div className="rounded-xl border border-border/50 p-4 space-y-3 bg-muted/10">
+          <div className="rounded-xl border border-border/50 p-2.5 sm:p-4 space-y-3 bg-muted/10">
             <p className="text-xs font-medium flex items-center gap-1.5">
               <DollarSign className="h-3.5 w-3.5" />
               New charge
@@ -725,7 +747,7 @@ export function AdminManualChargesPanel({
                       setAttachment(null);
                       return;
                     }
-                    setAttachment(file);
+                    setAttachment(file ? persistBrowserFile(file, "charge") : null);
                   }}
                 />
                 <p className="text-[11px] text-muted-foreground">
@@ -744,6 +766,9 @@ export function AdminManualChargesPanel({
                 />
               </div>
             </div>
+            {addEntry.isPending && attachment && (
+              <UploadProgressStatus label="Uploading attachment" percent={uploadPercent ?? 0} />
+            )}
             <div className="flex gap-2">
               <Button
                 type="button"
@@ -766,9 +791,12 @@ export function AdminManualChargesPanel({
                       getBillEntryTotals(Number(amount) || 0).totalAmount,
                     ))
                 }
-                onClick={handleAdd}
+                onClick={() => {
+                  if (attachment) setUploadPercent(0);
+                  handleAdd();
+                }}
               >
-                {addEntry.isPending ? "Adding..." : "Add charge"}
+                {addEntry.isPending ? (attachment ? "Uploading attachment..." : "Adding...") : "Add charge"}
               </Button>
             </div>
           </div>

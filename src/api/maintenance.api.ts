@@ -6,6 +6,10 @@ export const maintenanceApi = {
     const res = await apiClient.get<Maintenance[]>(`/maintenance/car/${carId}`);
     return res.data;
   },
+  list: async () => {
+    const res = await apiClient.get<Maintenance[]>("/maintenance");
+    return res.data;
+  },
   listByStatus: async (status: MaintenanceStatus) => {
     const res = await apiClient.get<Maintenance[]>("/maintenance", { params: { status } });
     return res.data;

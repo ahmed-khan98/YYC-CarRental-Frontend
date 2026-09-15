@@ -1,9 +1,7 @@
 import { useMemo } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { carsApi } from "@/api/cars.api.ts";
-import { locationsApi } from "@/api/locations.api.ts";
-import { bookingsApi, type CarBookingCalendarItem } from "@/api/bookings.api.ts";
+import { bookingsApi } from "@/api/bookings.api.ts";
 import { CarBookingCalendar } from "@/components/car-booking-calendar.tsx";
 import { DateGroupedBookingsTable } from "@/components/date-grouped-bookings.tsx";
 import { buildBookingDateGroups } from "@/lib/bookingDateGroups.ts";
@@ -13,6 +11,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card.t
 import { Skeleton } from "@/components/ui/skeleton.tsx";
 import { ArrowLeft, CalendarDays, Car as CarIcon, ListOrdered } from "lucide-react";
 import { carPrimaryImage, resolveMediaUrl } from "@/lib/mediaUrl.ts";
+import { formatCarName } from "@/lib/displayName.ts";
+import { cn } from "@/lib/utils.ts";
 
 const CAR_IMAGES: Record<string, string> = {
   economy: "https://images.unsplash.com/photo-1690278289651-895463644114?w=400&q=70",
@@ -43,28 +43,14 @@ export default function AdminCarBookingsPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
 
-  const { data: car, isLoading: carLoading } = useQuery({
-    queryKey: ["cars", id],
-    queryFn: () => carsApi.get(id!),
-    enabled: !!id,
-  });
-
-  const { data: bookings, isLoading: bookingsLoading } = useQuery({
+  const { data, isLoading } = useQuery({
     queryKey: ["bookings", "admin", "car", id],
     queryFn: () => bookingsApi.adminListByCar(id!),
     enabled: !!id,
   });
 
-  const { data: locations } = useQuery({
-    queryKey: ["locations"],
-    queryFn: () => locationsApi.list(),
-  });
-
-  const locationsMap = useMemo(() => {
-    const map = new Map<string, { name: string }>();
-    (locations ?? []).forEach((l) => map.set(l._id, l));
-    return map;
-  }, [locations]);
+  const car = data?.car;
+  const bookings = data?.bookings;
 
   const dateGroups = useMemo(
     () => buildBookingDateGroups(bookings ?? [], []),
@@ -72,8 +58,7 @@ export default function AdminCarBookingsPage() {
   );
 
   const bookingsById = useMemo(() => {
-    const map = new Map<string, CarBookingCalendarItem>();
-    (bookings ?? []).forEach((b) => map.set(b._id, b));
+    const map = new Map((bookings ?? []).map((booking) => [booking._id, booking]));
     return map;
   }, [bookings]);
 
@@ -94,7 +79,7 @@ export default function AdminCarBookingsPage() {
         <ArrowLeft className="h-4 w-4 mr-1" /> Cars
       </Button>
 
-      {carLoading ? (
+      {isLoading ? (
         <Skeleton className="h-24 w-full rounded-xl" />
       ) : car ? (
         <Card className="border-border/50 bg-card/60 py-0 gap-0">
@@ -111,12 +96,20 @@ export default function AdminCarBookingsPage() {
               </div>
             )}
             <div>
-              <h1 className="text-xl font-bold">{car.year} {car.make} {car.model}</h1>
+              <h1 className="text-xl font-bold">{formatCarName(car)}</h1>
               <p className="text-sm text-muted-foreground capitalize mt-0.5">
                 {car.category} · {car.color} · ${car.dailyRate}/day
               </p>
               <div className="flex gap-2 mt-2">
-                <Badge className={car.isAvailable ? "bg-primary/20 text-primary border-primary/30" : "bg-destructive/20 text-destructive border-destructive/30"}>
+                <Badge
+                  variant="outline"
+                  className={cn(
+                    "text-[11px] font-medium border",
+                    car.isAvailable
+                      ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                      : "bg-red-50 text-red-700 border-red-200",
+                  )}
+                >
                   {car.isAvailable ? "Available" : "Unavailable"}
                 </Badge>
                 {car.licensePlate && (
@@ -128,7 +121,9 @@ export default function AdminCarBookingsPage() {
         </Card>
       ) : (
         <Card className="border-border/50">
-          <CardContent className="py-8 text-center text-muted-foreground">Car not found.</CardContent>
+          <CardContent className="py-8 text-center text-muted-foreground">
+            Car not found.
+          </CardContent>
         </Card>
       )}
 
@@ -145,7 +140,7 @@ export default function AdminCarBookingsPage() {
           </CardTitle>
         </CardHeader>
         <CardContent className="px-4 pb-4 pt-0">
-          {bookingsLoading ? (
+          {isLoading ? (
             <Skeleton className="h-96 w-full rounded-xl" />
           ) : bookings && bookings.length > 0 ? (
             <CarBookingCalendar
@@ -173,20 +168,20 @@ export default function AdminCarBookingsPage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="px-4 pb-4 pt-0">
-            {bookingsLoading ? (
-              <Skeleton className="h-64 w-full rounded-xl" />
-            ) : (
-              <DateGroupedBookingsTable
-                groups={dateGroups}
-                getCustomerLabel={(booking) => bookingsById.get(booking._id)?.customerName ?? undefined}
-                getCustomerEmail={(booking) => bookingsById.get(booking._id)?.customerEmail ?? undefined}
-                getPickupLocationName={(booking) => locationsMap.get(booking.pickupLocationId)?.name}
-                getDropoffLocationName={(booking) => locationsMap.get(booking.dropoffLocationId)?.name}
-                onViewBooking={(bookingId) => navigate(`/admin/bookings/${bookingId}`)}
-                statusColors={STATUS_COLORS}
-                paymentColors={PAYMENT_COLORS}
-              />
-            )}
+            <DateGroupedBookingsTable
+              groups={dateGroups}
+              getCustomerLabel={(booking) =>
+                bookingsById.get(booking._id)?.customerName ?? booking.user?.name ?? undefined
+              }
+              getCustomerEmail={(booking) =>
+                bookingsById.get(booking._id)?.customerEmail ?? booking.user?.email ?? undefined
+              }
+              getPickupLocationName={(booking) => booking.pickupLocation?.name}
+              getDropoffLocationName={(booking) => booking.dropoffLocation?.name}
+              onViewBooking={(bookingId) => navigate(`/admin/bookings/${bookingId}`)}
+              statusColors={STATUS_COLORS}
+              paymentColors={PAYMENT_COLORS}
+            />
           </CardContent>
         </Card>
       )}

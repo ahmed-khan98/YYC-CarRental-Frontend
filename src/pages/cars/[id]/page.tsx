@@ -2,13 +2,12 @@ import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { carsApi } from "@/api/cars.api.ts";
-import { locationsApi } from "@/api/locations.api.ts";
 import Navbar from "@/components/navbar.tsx";
 import Footer from "@/components/footer.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import { Badge } from "@/components/ui/badge.tsx";
 import { Skeleton } from "@/components/ui/skeleton.tsx";
-import { ArrowLeft, Users, Fuel, Gauge, Cog, MapPin, CheckCircle } from "lucide-react";
+import { ArrowLeft, Users, Fuel, Gauge, Cog, CheckCircle } from "lucide-react";
 import { motion } from "motion/react";
 import { cn } from "@/lib/utils.ts";
 import { vehicleCategoryBadgeClass } from "@/lib/vehicleCategories.ts";
@@ -37,11 +36,6 @@ export default function CarDetailPage() {
     queryKey: ["cars", id],
     queryFn: () => carsApi.get(id!),
     enabled: !!id,
-  });
-  const { data: location } = useQuery({
-    queryKey: ["locations", car?.locationId],
-    queryFn: () => locationsApi.get(car!.locationId!),
-    enabled: !!car?.locationId,
   });
 
   if (carLoading) {
@@ -182,17 +176,6 @@ export default function CarDetailPage() {
                           {f}
                         </div>
                       ))}
-                    </div>
-                  </div>
-                )}
-
-                {location && (
-                  <div className="flex items-start gap-2 text-sm text-muted-foreground">
-                    <MapPin className="h-4 w-4 text-primary mt-0.5 shrink-0" />
-                    <div>
-                      <span className="font-medium text-foreground">{location.name}</span>
-                      <br />
-                      {location.address}, {location.city}
                     </div>
                   </div>
                 )}

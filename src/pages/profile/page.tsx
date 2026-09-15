@@ -17,7 +17,8 @@ import { motion } from "motion/react";
 import { User, Phone, FileText, Upload, CheckCircle, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge.tsx";
 import { getApiErrorMessage } from "@/api/client.ts";
-import { resolveMediaUrl } from "@/lib/mediaUrl.ts";
+import { persistBrowserFile, resolveMediaUrl } from "@/lib/mediaUrl.ts";
+import { UploadProgressStatus } from "@/components/upload-progress.tsx";
 
 function ProfileInner() {
   const queryClient = useQueryClient();
@@ -37,6 +38,7 @@ function ProfileInner() {
   const [licenseFile, setLicenseFile] = useState<File | null>(null);
   const [licensePreview, setLicensePreview] = useState("");
   const [loading, setLoading] = useState(false);
+  const [uploadPercent, setUploadPercent] = useState<number | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -52,8 +54,9 @@ function ProfileInner() {
   const handleLicenseChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    setLicenseFile(file);
-    setLicensePreview(URL.createObjectURL(file));
+    const persisted = persistBrowserFile(file, "license");
+    setLicenseFile(persisted);
+    setLicensePreview(URL.createObjectURL(persisted));
   };
 
   const handleSave = async () => {
@@ -61,7 +64,11 @@ function ProfileInner() {
     try {
       let licenseUrl: string | undefined;
       if (licenseFile) {
-        licenseUrl = await uploadFile(licenseFile, "licenses");
+        setUploadPercent(0);
+        licenseUrl = await uploadFile(licenseFile, "licenses", (progress) => {
+          setUploadPercent(progress.percent);
+        });
+        setUploadPercent(null);
       }
       await updateProfile.mutateAsync({
         name: patchText(name),
@@ -74,6 +81,7 @@ function ProfileInner() {
       toast.error(getApiErrorMessage(error) || "Failed to update profile");
     } finally {
       setLoading(false);
+      setUploadPercent(null);
     }
   };
 
@@ -188,9 +196,14 @@ function ProfileInner() {
         </CardContent>
       </Card>
 
-      <Button onClick={handleSave} disabled={loading} className="w-full cursor-pointer" size="lg">
-        {loading ? "Saving..." : "Save Profile"}
-      </Button>
+      <div className="space-y-2">
+        {loading && licenseFile && (
+          <UploadProgressStatus label="Uploading license" percent={uploadPercent ?? 0} />
+        )}
+        <Button onClick={handleSave} disabled={loading} className="w-full cursor-pointer" size="lg">
+          {loading ? (licenseFile ? "Uploading license..." : "Saving...") : "Save Profile"}
+        </Button>
+      </div>
     </div>
   );
 }

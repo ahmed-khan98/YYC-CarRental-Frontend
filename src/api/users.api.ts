@@ -24,7 +24,7 @@ export const usersApi = {
   },
   updateSubAdmin: async (
     userId: string,
-    data: { name?: string; email?: string; password?: string },
+    data: { name?: string; email?: string; password?: string; isActive?: boolean },
   ) => {
     const res = await apiClient.patch<User>(`/users/sub-admins/${userId}`, data);
     return res.data;

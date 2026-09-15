@@ -10,6 +10,15 @@ export const carsApi = {
     const res = await apiClient.get<Car[]>("/cars", { params });
     return res.data;
   },
+  listAvailable: async (params: {
+    pickupDate: string;
+    returnDate: string;
+    pickupTime?: string;
+    returnTime?: string;
+  }) => {
+    const res = await apiClient.get<Car[]>("/cars/available", { params });
+    return res.data;
+  },
   get: async (carId: string) => {
     const res = await apiClient.get<Car>(`/cars/${carId}`);
     return res.data;

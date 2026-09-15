@@ -1,11 +1,8 @@
 import { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { carsApi } from "@/api/cars.api.ts";
-import { locationsApi } from "@/api/locations.api.ts";
 import { bookingsApi } from "@/api/bookings.api.ts";
-import { inspectionsApi } from "@/api/inspections.api.ts";
 import { getApiErrorMessage } from "@/api/client.ts";
-import type { Booking, Car, Location } from "@/types/index.ts";
+import type { Booking, VehicleInspection } from "@/types/index.ts";
 import Navbar from "@/components/navbar.tsx";
 import Footer from "@/components/footer.tsx";
 import { Button } from "@/components/ui/button.tsx";
@@ -46,12 +43,7 @@ const CAR_IMAGES: Record<string, string> = {
   van: "https://images.unsplash.com/photo-1701918190763-3851cf361f96?w=200&q=80",
 };
 
-function InspectionHistory({ bookingId }: { bookingId: string }) {
-  const { data: inspections } = useQuery({
-    queryKey: ["inspections", bookingId],
-    queryFn: () => inspectionsApi.listByBooking(bookingId),
-  });
-
+function InspectionHistory({ inspections }: { inspections?: VehicleInspection[] }) {
   if (!inspections || inspections.length === 0) return null;
 
   return (
@@ -107,13 +99,9 @@ function InspectionHistory({ bookingId }: { bookingId: string }) {
 
 function RentalHistoryTable({
   bookings,
-  carsMap,
-  locationsMap,
   isLoading,
 }: {
   bookings: Booking[];
-  carsMap: Map<string, Car>;
-  locationsMap: Map<string, Location>;
   isLoading?: boolean;
 }) {
   const navigate = useNavigate();
@@ -146,7 +134,7 @@ function RentalHistoryTable({
       className: "whitespace-normal",
       headClassName: "whitespace-normal",
       cell: (booking) => {
-        const car = carsMap.get(booking.carId);
+        const car = booking.car;
         const carImg = carPrimaryImage(car, car ? CAR_IMAGES[car.category] : undefined);
         return (
           <div className="flex items-center gap-2">
@@ -172,7 +160,7 @@ function RentalHistoryTable({
       cell: (booking) => (
         <BookingPickupCell
           booking={booking}
-          locationName={locationsMap.get(booking.pickupLocationId)?.name}
+          locationName={booking.pickupLocation?.name}
         />
       ),
     },
@@ -184,7 +172,7 @@ function RentalHistoryTable({
       cell: (booking) => (
         <BookingDropoffCell
           booking={booking}
-          locationName={locationsMap.get(booking.dropoffLocationId)?.name}
+          locationName={booking.dropoffLocation?.name}
         />
       ),
     },
@@ -266,7 +254,7 @@ function RentalHistoryTable({
         );
       },
     },
-  ], [carsMap, locationsMap, expandedId, navigate]);
+  ], [expandedId, navigate]);
 
   return (
     <>
@@ -298,7 +286,7 @@ function RentalHistoryTable({
               You cancelled this booking.
             </div>
           )}
-          <InspectionHistory bookingId={booking._id} />
+          <InspectionHistory inspections={booking.inspections} />
         </div>
       )}
     />
@@ -320,19 +308,8 @@ function DashboardInner() {
     queryKey: ["bookings"],
     queryFn: () => bookingsApi.myBookings(),
   });
-  const { data: cars } = useQuery({
-    queryKey: ["cars"],
-    queryFn: () => carsApi.list(),
-  });
-  const { data: locations } = useQuery({
-    queryKey: ["locations"],
-    queryFn: () => locationsApi.list(),
-  });
   const { user } = useAuth();
   const navigate = useNavigate();
-
-  const carsMap = useMemo(() => new Map((cars ?? []).map((c) => [c._id, c])), [cars]);
-  const locationsMap = useMemo(() => new Map((locations ?? []).map((l) => [l._id, l])), [locations]);
 
   const sortedBookings = useMemo(
     () => (bookings ?? []).slice().sort((a, b) => b._creationTime - a._creationTime),
@@ -396,8 +373,6 @@ function DashboardInner() {
           ) : (
             <RentalHistoryTable
               bookings={sortedBookings}
-              carsMap={carsMap}
-              locationsMap={locationsMap}
               isLoading={bookingsLoading}
             />
           )}

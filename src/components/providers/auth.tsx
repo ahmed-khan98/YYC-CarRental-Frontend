@@ -25,6 +25,7 @@ import {
   setStoredUser,
 } from "@/api/client.ts";
 import type { User } from "@/types/index.ts";
+import { normalizePrimaryAdminUser } from "@/lib/displayName.ts";
 
 interface AuthContextValue {
   user: User | null;
@@ -39,14 +40,17 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 function rememberUser(next: User) {
-  setStoredUser(next);
-  return next;
+  const normalized = normalizePrimaryAdminUser(next);
+  setStoredUser(normalized);
+  return normalized;
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(() =>
-    getStoredToken() ? getStoredUser() : null,
-  );
+  const [user, setUser] = useState<User | null>(() => {
+    if (!getStoredToken()) return null;
+    const stored = getStoredUser();
+    return stored ? normalizePrimaryAdminUser(stored) : null;
+  });
   const [sessionAlive, setSessionAlive] = useState(() => !!getStoredToken());
   const [isLoading, setIsLoading] = useState(() => !!getStoredToken() && !getStoredUser());
 

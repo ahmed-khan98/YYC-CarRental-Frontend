@@ -6,7 +6,7 @@ import { AdminEditBookingDialog } from "@/components/admin-edit-booking-dialog.t
 import type { Booking } from "@/types/index.ts";
 import { Button } from "@/components/ui/button.tsx";
 import { Badge } from "@/components/ui/badge.tsx";
-import { Skeleton } from "@/components/ui/skeleton.tsx";
+import { BookingsTableSkeleton } from "@/components/page-skeleton.tsx";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select.tsx";
 import { Input } from "@/components/ui/input.tsx";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog.tsx";
@@ -266,22 +266,22 @@ export default function AdminBookingsPage() {
           </div>
           <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setPage(1); }}>
             <SelectTrigger className="w-full lg:w-40 h-9"><SelectValue placeholder="Status" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Status</SelectItem>
+                <SelectContent>
+                  <SelectItem value="all">All Status</SelectItem>
               {STATUS_OPTIONS.map((s) => (
                 <SelectItem key={s} value={s} className="capitalize">{s.replace(/_/g, " ")}</SelectItem>
               ))}
-            </SelectContent>
-          </Select>
+                </SelectContent>
+              </Select>
           <Select value={paymentFilter} onValueChange={(v) => { setPaymentFilter(v); setPage(1); }}>
             <SelectTrigger className="w-full lg:w-40 h-9"><SelectValue placeholder="Payment" /></SelectTrigger>
-            <SelectContent>
+                <SelectContent>
               <SelectItem value="all">All Payments</SelectItem>
               {PAYMENT_OPTIONS.map((p) => (
                 <SelectItem key={p} value={p} className="capitalize">{p}</SelectItem>
               ))}
-            </SelectContent>
-          </Select>
+                </SelectContent>
+              </Select>
           <Hint label="From date">
             <Input
               type="date"
@@ -310,7 +310,7 @@ export default function AdminBookingsPage() {
 
       {/* Table */}
       {isLoading ? (
-        <div className="space-y-2">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}</div>
+        <BookingsTableSkeleton />
       ) : filtered.length === 0 ? (
         <div className="text-center py-16 rounded-xl border border-border/50">
           <CalendarCheck className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
@@ -345,8 +345,12 @@ export default function AdminBookingsPage() {
                 {paginated.map((booking) => {
                   const customer = booking.user;
                   const car = booking.car;
-                  return (
-                    <TableRow key={booking._id}>
+            return (
+                    <TableRow
+                      key={booking._id}
+                      className="cursor-pointer"
+                      onClick={() => navigate(`/admin/bookings/${booking._id}`)}
+                    >
                       <TableCell className="font-mono text-xs">#{booking._id.slice(-8).toUpperCase()}</TableCell>
                       <TableCell className="hidden sm:table-cell">
                         <div className="text-sm font-medium truncate max-w-[140px]">{formatDisplayName(customer?.name)}</div>
@@ -375,10 +379,10 @@ export default function AdminBookingsPage() {
                       <TableCell className="hidden md:table-cell">
                         <Badge variant="outline" className={`text-[10px] capitalize ${PAYMENT_COLORS[booking.paymentStatus ?? "pending"] ?? ""}`}>
                           {booking.paymentStatus ?? "pending"}
-                        </Badge>
+                            </Badge>
                       </TableCell>
                       <TableCell className="font-semibold text-primary text-sm">${booking.totalAmount}</TableCell>
-                      <TableCell className="text-right">
+                      <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <Button variant="ghost" size="icon" className="h-8 w-8 cursor-pointer">
@@ -411,7 +415,7 @@ export default function AdminBookingsPage() {
                 })}
               </TableBody>
             </Table>
-          </div>
+                        </div>
 
           {/* Pagination */}
           <div className="flex flex-col sm:flex-row items-center justify-between gap-3 text-sm text-muted-foreground">
@@ -419,29 +423,29 @@ export default function AdminBookingsPage() {
               Showing {(currentPage - 1) * PAGE_SIZE + 1}–{Math.min(currentPage * PAGE_SIZE, filtered.length)} of {filtered.length}
             </span>
             <div className="flex items-center gap-2">
-              <Button
+                          <Button
                 variant="outline"
-                size="sm"
+                            size="sm"
                 disabled={currentPage <= 1}
                 onClick={() => setPage((p) => p - 1)}
                 className="cursor-pointer"
               >
                 <ChevronLeft className="h-4 w-4" />
-              </Button>
+                          </Button>
               <span className="text-foreground font-medium px-2">
                 Page {currentPage} of {totalPages}
               </span>
-              <Button
+                            <Button
                 variant="outline"
-                size="sm"
+                              size="sm"
                 disabled={currentPage >= totalPages}
                 onClick={() => setPage((p) => p + 1)}
                 className="cursor-pointer"
               >
                 <ChevronRight className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
+                            </Button>
+                        </div>
+                      </div>
         </>
       )}
 
@@ -460,13 +464,13 @@ export default function AdminBookingsPage() {
           <DialogHeader><DialogTitle>Delete / Cancel Booking</DialogTitle></DialogHeader>
           <div className="space-y-3 py-2">
             <p className="text-sm text-muted-foreground">Provide a reason — this will be visible to the customer.</p>
-            <textarea
+              <textarea
               className="w-full bg-input border border-border rounded-lg px-3 py-2 text-sm resize-none"
-              rows={3}
+                rows={3}
               placeholder="Cancellation reason..."
-              value={cancelReason}
-              onChange={(e) => setCancelReason(e.target.value)}
-            />
+                value={cancelReason}
+                onChange={(e) => setCancelReason(e.target.value)}
+              />
           </div>
           <DialogFooter>
             <Button variant="secondary" onClick={() => setCancelOpen(false)} className="cursor-pointer">Back</Button>

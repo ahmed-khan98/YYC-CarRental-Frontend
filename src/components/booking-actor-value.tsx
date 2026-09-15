@@ -3,7 +3,7 @@ import type { BookingActor } from "@/lib/bookingActor.ts";
 import { roleLabel } from "@/lib/roles.ts";
 import { Badge } from "@/components/ui/badge.tsx";
 import { cn } from "@/lib/utils.ts";
-import { formatDisplayName } from "@/lib/displayName.ts";
+import { formatActorDisplayName } from "@/lib/displayName.ts";
 
 export function BookingActorValue({
   actor,
@@ -26,7 +26,9 @@ export function BookingActorValue({
     <span className={cn("text-right inline-flex flex-col items-end gap-0.5", className)}>
       <span className="inline-flex items-center justify-end gap-1.5 flex-wrap">
         {actor.name && (
-          <span className={cn("font-medium", compact && "text-xs")}>{formatDisplayName(actor.name, "")}</span>
+          <span className={cn("font-medium", compact && "text-xs")}>
+            {formatActorDisplayName(actor.name, actor.role, "")}
+          </span>
         )}
         {badgeLabel && (
           <Badge

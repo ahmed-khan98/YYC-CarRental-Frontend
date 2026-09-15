@@ -25,8 +25,23 @@ const FUEL_LABELS: Record<string, string> = {
   full: "Full Tank",
 };
 
-const CONDITION_MEDIA_THUMB =
-  "h-16 w-24 object-cover rounded-xl hover:opacity-80 transition-opacity border border-border/30";
+function DriverField({
+  label,
+  value,
+  className,
+}: {
+  label: string;
+  value?: string | null;
+  className?: string;
+}) {
+  if (!value) return null;
+  return (
+    <div className={className ? `min-w-0 ${className}` : "min-w-0"}>
+      <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</p>
+      <p className="text-xs font-medium leading-snug break-words">{value}</p>
+    </div>
+  );
+}
 
 function DriverLicenseCard({
   licenseImageUrl,
@@ -38,23 +53,23 @@ function DriverLicenseCard({
   children: ReactNode;
 }) {
   return (
-    <div className="rounded-lg border border-border/30 bg-background/50 px-3 py-2.5 text-xs">
-      <div className="flex flex-col sm:flex-row sm:items-start gap-3">
-        <div className="min-w-0 flex-1 space-y-1">{children}</div>
+    <div className="rounded-lg border border-border/30 bg-background/50 p-2.5 text-xs">
+      <div className="flex flex-col gap-2.5">
         {licenseImageUrl && (
           <a
             href={resolveMediaUrl(licenseImageUrl)}
             target="_blank"
             rel="noopener noreferrer"
-            className="shrink-0 self-start block w-full sm:w-auto"
+            className="block"
           >
             <img
               src={resolveMediaUrl(licenseImageUrl)}
               alt={licenseAlt}
-              className="h-28 w-full max-w-40 sm:h-32 sm:w-44 sm:max-w-none rounded-lg border border-border/30 object-contain bg-background hover:opacity-80"
+              className="h-36 w-full rounded-md border border-border/30 object-contain bg-background hover:opacity-80 sm:h-40"
             />
           </a>
         )}
+        <div className="min-w-0 grid grid-cols-2 gap-x-2 gap-y-2">{children}</div>
       </div>
     </div>
   );
@@ -76,8 +91,8 @@ function InspectionRecordCard({
     : booking?.checkOutVisibleToUser ?? false;
 
   return (
-    <div className="rounded-xl border border-border/40 bg-muted/20 p-4 space-y-3 h-full w-full">
-      <div className="flex items-start justify-between gap-3">
+    <div className="rounded-xl border border-border/40 bg-muted/20 p-2.5 sm:p-4 space-y-2.5 h-full w-full">
+      <div className="flex items-start justify-between gap-2">
         <div className="flex items-center gap-2 min-w-0">
           <div
             className={`p-1.5 rounded-lg shrink-0 ${
@@ -113,14 +128,14 @@ function InspectionRecordCard({
         )}
       </div>
 
-      <div className="grid grid-cols-2 gap-2">
-        <div className="bg-background/50 rounded-lg px-3 py-2.5 border border-border/30">
+      <div className="grid grid-cols-2 gap-1.5">
+        <div className="bg-background/50 rounded-lg px-2.5 py-2 border border-border/30">
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-0.5">
             <Gauge className="h-3 w-3" /> Mileage
           </div>
           <p className="text-sm font-semibold">{inspection.mileage.toLocaleString()} km</p>
         </div>
-        <div className="bg-background/50 rounded-lg px-3 py-2.5 border border-border/30">
+        <div className="bg-background/50 rounded-lg px-2.5 py-2 border border-border/30">
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-0.5">
             <Fuel className="h-3 w-3" /> Fuel Level
           </div>
@@ -140,20 +155,27 @@ function InspectionRecordCard({
             licenseImageUrl={inspection.mainDriver.licenseImageUrl}
             licenseAlt="Main driver license"
           >
-            <p className="font-medium text-sm">{inspection.mainDriver.fullLegalName}</p>
-            <p className="text-muted-foreground">DOB: {inspection.mainDriver.dateOfBirth}</p>
-            <p className="text-muted-foreground">{inspection.mainDriver.phoneNumber}</p>
-            <p className="text-muted-foreground">{inspection.mainDriver.emailAddress}</p>
-            <p className="text-muted-foreground">
-              {[inspection.mainDriver.homeAddressLine1, inspection.mainDriver.homeAddressLine2, inspection.mainDriver.homeAddressLine3]
+            <DriverField label="Name" value={inspection.mainDriver.fullLegalName} />
+            <DriverField label="DOB" value={inspection.mainDriver.dateOfBirth} />
+            <DriverField label="Phone" value={inspection.mainDriver.phoneNumber} />
+            <DriverField label="Email" value={inspection.mainDriver.emailAddress} />
+            <DriverField
+              className="col-span-2"
+              label="Address"
+              value={[
+                inspection.mainDriver.homeAddressLine1,
+                inspection.mainDriver.homeAddressLine2,
+                inspection.mainDriver.homeAddressLine3,
+              ]
                 .filter(Boolean)
                 .join(", ")}
-            </p>
-            <p className="text-muted-foreground">License: {inspection.mainDriver.licenseNumber}</p>
-            <p className="text-muted-foreground">
-              {inspection.mainDriver.issuingProvince} · Expires {inspection.mainDriver.licenseExpiryDate}
-            </p>
-            <p className="text-muted-foreground">Policy: {inspection.mainDriver.policyNo}</p>
+            />
+            <DriverField label="License" value={inspection.mainDriver.licenseNumber} />
+            <DriverField
+              label="Issued / expires"
+              value={`${inspection.mainDriver.issuingProvince} · ${inspection.mainDriver.licenseExpiryDate}`}
+            />
+            <DriverField label="Policy" value={inspection.mainDriver.policyNo} />
           </DriverLicenseCard>
         </div>
       )}
@@ -171,11 +193,10 @@ function InspectionRecordCard({
                 licenseImageUrl={driver.licenseImageUrl}
                 licenseAlt={`${driver.fullName} license`}
               >
-                <p className="font-medium text-sm">Driver {index + 1}: {driver.fullName}</p>
-                <p className="text-muted-foreground">License: {driver.licenseNumber}</p>
-                <p className="text-muted-foreground">
-                  Expires: {driver.licenseExpiryDate} · {driver.countryOfIssue}
-                </p>
+                <DriverField label={`Driver ${index + 1}`} value={driver.fullName} />
+                <DriverField label="License" value={driver.licenseNumber} />
+                <DriverField label="Expires" value={driver.licenseExpiryDate} />
+                <DriverField label="Country" value={driver.countryOfIssue} />
               </DriverLicenseCard>
             ))}
           </div>
@@ -202,7 +223,8 @@ function InspectionRecordCard({
           <InspectionMediaGallery
             urls={mediaUrls}
             altPrefix={isCheckIn ? "Check-in" : "Check-out"}
-            thumbClassName={CONDITION_MEDIA_THUMB}
+            gridClassName="grid-cols-4 sm:grid-cols-5 gap-1"
+            thumbClassName="h-14 w-full aspect-auto object-cover rounded-md"
           />
         </div>
       )}

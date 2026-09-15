@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input.tsx";
 import { Label } from "@/components/ui/label.tsx";
 import { AdminDataTable, type AdminTableColumn } from "@/components/admin-data-table.tsx";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog.tsx";
+import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog.tsx";
 import { Switch } from "@/components/ui/switch.tsx";
 import { toast } from "sonner";
 import { Plus, Pencil, Trash2, MapPin } from "lucide-react";
@@ -15,6 +16,7 @@ import { Badge } from "@/components/ui/badge.tsx";
 import { patchText } from "@/lib/patchPayload.ts";
 import { useAuth } from "@/hooks/use-auth.ts";
 import { canDeleteRecords } from "@/lib/roles.ts";
+import { cn } from "@/lib/utils.ts";
 
 interface LocForm { name: string; address: string; city: string; phone: string; }
 const EMPTY: LocForm = { name: "", address: "", city: "", phone: "" };
@@ -45,6 +47,7 @@ export default function AdminLocationsPage() {
   const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState<LocForm>(EMPTY);
   const [loading, setLoading] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<Location | null>(null);
 
   const f = (k: keyof LocForm) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm((p) => ({ ...p, [k]: e.target.value }));
@@ -75,10 +78,15 @@ export default function AdminLocationsPage() {
     finally { setLoading(false); }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm("Delete this location?")) return;
-    try { await remove.mutateAsync(id); toast.success("Deleted"); }
-    catch { toast.error("Failed to delete"); }
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    try {
+      await remove.mutateAsync(deleteTarget._id);
+      toast.success("Deleted");
+      setDeleteTarget(null);
+    } catch {
+      toast.error("Failed to delete");
+    }
   };
 
   const handleToggle = async (id: string, current: boolean) => {
@@ -120,7 +128,15 @@ export default function AdminLocationsPage() {
       id: "status",
       header: "Status",
       cell: (loc) => (
-        <Badge className={loc.isActive ? "bg-primary/20 text-primary border-primary/30 text-[10px]" : "bg-destructive/20 text-destructive border-destructive/30 text-[10px]"}>
+        <Badge
+          variant="outline"
+          className={cn(
+            "text-[11px] font-medium border",
+            loc.isActive
+              ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+              : "bg-red-50 text-red-700 border-red-200",
+          )}
+        >
           {loc.isActive ? "Active" : "Inactive"}
         </Badge>
       ),
@@ -148,7 +164,7 @@ export default function AdminLocationsPage() {
           </Hint>
           {canDelete && (
           <Hint label="Delete location">
-            <Button variant="ghost" size="icon" onClick={() => handleDelete(loc._id)} className="cursor-pointer h-8 w-8 text-destructive hover:text-destructive" aria-label="Delete location">
+            <Button variant="ghost" size="icon" onClick={() => setDeleteTarget(loc)} className="cursor-pointer h-8 w-8 text-destructive hover:text-destructive" aria-label="Delete location">
               <Trash2 className="h-4 w-4" />
             </Button>
           </Hint>
@@ -194,6 +210,19 @@ export default function AdminLocationsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDeleteDialog
+        open={Boolean(deleteTarget)}
+        onOpenChange={(next) => !next && setDeleteTarget(null)}
+        title="Delete this location?"
+        description={
+          deleteTarget
+            ? `This will permanently remove "${deleteTarget.name}". This action cannot be undone.`
+            : ""
+        }
+        loading={remove.isPending}
+        onConfirm={handleDelete}
+      />
     </div>
   );
 }

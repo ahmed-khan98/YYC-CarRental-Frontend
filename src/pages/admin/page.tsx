@@ -1,8 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { carsApi } from "@/api/cars.api.ts";
 import { bookingsApi } from "@/api/bookings.api.ts";
-import { usersApi } from "@/api/users.api.ts";
-import { locationsApi } from "@/api/locations.api.ts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card.tsx";
 import { Skeleton } from "@/components/ui/skeleton.tsx";
 import { motion } from "motion/react";
@@ -23,22 +20,13 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 export default function AdminOverview() {
-  const { data: cars } = useQuery({ queryKey: ["cars"], queryFn: () => carsApi.list() });
-  const { data: bookings } = useQuery({ queryKey: ["bookings", "admin"], queryFn: () => bookingsApi.adminList() });
-  const { data: users } = useQuery({ queryKey: ["users"], queryFn: () => usersApi.listUsers() });
-  const { data: locations } = useQuery({ queryKey: ["locations"], queryFn: () => locationsApi.list() });
+  const { data: overview, isLoading } = useQuery({
+    queryKey: ["bookings", "admin", "overview"],
+    queryFn: () => bookingsApi.adminOverview(),
+  });
 
-  const stats = {
-    totalCars: cars?.length ?? 0,
-    availableCars: cars?.filter((c) => c.isAvailable).length ?? 0,
-    totalBookings: bookings?.length ?? 0,
-    pendingBookings: bookings?.filter((b) => b.status === "pending").length ?? 0,
-    revenue: bookings?.filter((b) => b.status !== "cancelled").reduce((s, b) => s + b.totalAmount, 0) ?? 0,
-    customers: users?.length ?? 0,
-  };
-
-  const recentBookings = (bookings ?? []).slice().sort((a, b) => b._creationTime - a._creationTime).slice(0, 5);
-  const carsById = new Map((cars ?? []).map((car) => [car._id, car]));
+  const stats = overview?.stats;
+  const recentBookings = overview?.recentBookings ?? [];
 
   return (
     <div className="p-6 space-y-6">
@@ -47,15 +35,14 @@ export default function AdminOverview() {
         <p className="text-muted-foreground text-sm mt-1">Dashboard summary</p>
       </div>
 
-      {/* Stat Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
         {[
-          { icon: Car, label: "Total Cars", value: stats.totalCars, sub: `${stats.availableCars} available`, color: "text-primary" },
-          { icon: CalendarCheck, label: "Total Bookings", value: stats.totalBookings, sub: `${stats.pendingBookings} pending`, color: "text-blue-400" },
-          { icon: TrendingUp, label: "Revenue", value: `$${stats.revenue.toLocaleString()}`, sub: "all time", color: "text-green-400" },
-          { icon: Users, label: "Customers", value: stats.customers, sub: "registered", color: "text-purple-400" },
-          { icon: MapPin, label: "Locations", value: locations?.length ?? 0, sub: "active", color: "text-yellow-400" },
-          { icon: Clock, label: "Active Rentals", value: bookings?.filter((b) => b.status === "checked_in").length ?? 0, sub: "checked in", color: "text-orange-400" },
+          { icon: Car, label: "Total Cars", value: stats?.totalCars ?? 0, sub: `${stats?.availableCars ?? 0} available`, color: "text-primary" },
+          { icon: CalendarCheck, label: "Total Bookings", value: stats?.totalBookings ?? 0, sub: `${stats?.pendingBookings ?? 0} pending`, color: "text-blue-400" },
+          { icon: TrendingUp, label: "Revenue", value: `$${(stats?.revenue ?? 0).toLocaleString()}`, sub: "all time", color: "text-green-400" },
+          { icon: Users, label: "Customers", value: stats?.customers ?? 0, sub: "registered", color: "text-purple-400" },
+          { icon: MapPin, label: "Locations", value: stats?.locations ?? 0, sub: "active", color: "text-yellow-400" },
+          { icon: Clock, label: "Active Rentals", value: stats?.checkedInBookings ?? 0, sub: "checked in", color: "text-orange-400" },
         ].map((stat, i) => (
           <motion.div
             key={stat.label}
@@ -66,7 +53,7 @@ export default function AdminOverview() {
             <Card className="border-border/50 bg-card/60">
               <CardContent className="p-4">
                 <stat.icon className={`h-5 w-5 ${stat.color} mb-2`} />
-                {cars === undefined ? (
+                {isLoading ? (
                   <Skeleton className="h-7 w-16 mb-1" />
                 ) : (
                   <div className="text-2xl font-bold">{stat.value}</div>
@@ -79,7 +66,6 @@ export default function AdminOverview() {
         ))}
       </div>
 
-      {/* Recent Bookings */}
       <Card className="border-border/50 bg-card/30">
         <CardHeader className="flex flex-row items-center justify-between pb-3">
           <CardTitle className="text-base">Recent Bookings</CardTitle>
@@ -88,12 +74,12 @@ export default function AdminOverview() {
           </Link>
         </CardHeader>
         <CardContent className="space-y-2">
-          {bookings === undefined
+          {isLoading
             ? Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-12 w-full" />)
             : recentBookings.length === 0
             ? <p className="text-muted-foreground text-sm text-center py-4">No bookings yet</p>
             : recentBookings.map((b) => {
-                const car = carsById.get(b.carId);
+                const car = b.car;
                 const carName = car ? formatCarName(car) : "Unknown car";
                 return (
                 <div key={b._id} className="flex items-center justify-between p-2 rounded-lg hover:bg-secondary/50 transition-colors">

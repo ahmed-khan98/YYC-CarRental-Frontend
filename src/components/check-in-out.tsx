@@ -2,8 +2,8 @@ import { useState, useRef, useEffect, useMemo } from "react";
 import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { inspectionsApi } from "@/api/inspections.api.ts";
 import { bookingsApi } from "@/api/bookings.api.ts";
-import { carsApi } from "@/api/cars.api.ts";
 import { uploadFile, uploadFiles } from "@/api/upload.api.ts";
+import { UploadProgressStatus, overallUploadPercent, uploadProgressLabel } from "@/components/upload-progress.tsx";
 import { CarMediaCapture } from "@/components/car-media-capture.tsx";
 import { LicenseImageCapture } from "@/components/license-image-capture.tsx";
 import { getApiErrorMessage } from "@/api/client.ts";
@@ -58,12 +58,24 @@ async function withUploadWakeLock<T>(run: () => Promise<T>): Promise<T> {
   }
 }
 
-function InspectionUploadOverlay({ open, label }: { open: boolean; label: string }) {
+function InspectionUploadOverlay({
+  open,
+  label,
+  percent,
+}: {
+  open: boolean;
+  label: string;
+  percent?: number | null;
+}) {
   if (!open) return null;
   return (
     <div className="absolute inset-0 z-50 flex flex-col items-center justify-center gap-3 bg-background/85 px-6 text-center backdrop-blur-[2px]">
       <Loader2 className="h-9 w-9 animate-spin text-primary" />
-      <p className="text-sm font-semibold">{label}</p>
+      <UploadProgressStatus
+        label={label}
+        percent={percent}
+        className="max-w-xs text-left [&_p]:text-sm [&_p]:font-semibold"
+      />
       <p className="text-xs text-muted-foreground">
         Photos and videos are uploading. Keep this screen open until it finishes.
       </p>
@@ -78,9 +90,11 @@ function invalidateAfterInspectionChange(
 ) {
   return Promise.all([
     queryClient.invalidateQueries({ queryKey: ["inspections", bookingId] }),
+    queryClient.invalidateQueries({ queryKey: ["inspections", "check-in-out"] }),
     queryClient.invalidateQueries({ queryKey: ["bookings", bookingId, "detail"] }),
     queryClient.invalidateQueries({ queryKey: ["bookings"], exact: true }),
     queryClient.invalidateQueries({ queryKey: ["bookings", "admin"] }),
+    queryClient.invalidateQueries({ queryKey: ["bookings", "admin", "overview"] }),
     carId ? queryClient.invalidateQueries({ queryKey: ["cars", carId] }) : Promise.resolve(),
   ]);
 }
@@ -158,6 +172,7 @@ function CheckInDialog({
   const [extraLicenseImages, setExtraLicenseImages] = useState<LicenseImageDraft[]>([]);
   const [loading, setLoading] = useState(false);
   const [savingLabel, setSavingLabel] = useState("Saving...");
+  const [uploadPercent, setUploadPercent] = useState<number | null>(null);
   const mainDriverPrefilledRef = useRef(false);
   const paymentAmountDirtyRef = useRef(false);
   const mainLicenseImageRef = useRef(mainLicenseImage);
@@ -406,6 +421,7 @@ function CheckInDialog({
 
     setLoading(true);
     setSavingLabel("Uploading photos...");
+    setUploadPercent(0);
     try {
       await withUploadWakeLock(async () => {
       let imageUrls: string[] | undefined;
@@ -413,9 +429,8 @@ function CheckInDialog({
       try {
         imageUrls = vehicleFiles.length > 0
           ? await uploadFiles(vehicleFiles, "inspections", (progress) => {
-              setSavingLabel(
-                `Uploading vehicle file ${progress.fileIndex} of ${progress.fileCount} (${progress.percent}%)`,
-              );
+              setSavingLabel(uploadProgressLabel("Uploading vehicle file", progress));
+              setUploadPercent(overallUploadPercent(progress));
             })
           : undefined;
       } catch (error) {
@@ -431,8 +446,10 @@ function CheckInDialog({
       let extraLicenseImageUrls: string[] = [];
       try {
         setSavingLabel("Uploading license photos...");
+        setUploadPercent(0);
         mainLicenseImageUrl = await uploadFile(mainLicenseFile, "licenses", (progress) => {
-          setSavingLabel(`Uploading license photo (${progress.percent}%)`);
+          setSavingLabel(uploadProgressLabel("Uploading license photo", progress));
+          setUploadPercent(progress.percent);
         });
         extraLicenseImageUrls = [];
         if (extraDriverCount > 0) {
@@ -441,8 +458,13 @@ function CheckInDialog({
             if (!image?.file) throw new Error(`Driver ${index + 1}: license image is required`);
             extraLicenseImageUrls.push(
               await uploadFile(image.file, "licenses", (progress) => {
-                setSavingLabel(
-                  `Uploading extra license ${index + 1} of ${extraDriverCount} (${progress.percent}%)`,
+                setSavingLabel(`Uploading extra license ${index + 1} of ${extraDriverCount}`);
+                setUploadPercent(
+                  overallUploadPercent({
+                    fileIndex: index + 1,
+                    fileCount: extraDriverCount,
+                    percent: progress.percent,
+                  }),
                 );
               }),
             );
@@ -453,6 +475,7 @@ function CheckInDialog({
       }
 
       setSavingLabel("Saving check-in...");
+      setUploadPercent(null);
       await createInspection.mutateAsync({
         carId: booking.carId,
         bookingId: booking._id,
@@ -501,6 +524,7 @@ function CheckInDialog({
       toast.error(getApiErrorMessage(error) || "Failed to complete check-in");
     } finally {
       setLoading(false);
+      setUploadPercent(null);
     }
   };
 
@@ -510,7 +534,7 @@ function CheckInDialog({
         dismissible={false}
         className="flex w-[calc(100vw-1rem)] max-w-4xl flex-col gap-0 overflow-hidden p-0 max-h-[min(92vh,880px)]"
       >
-        <InspectionUploadOverlay open={loading} label={savingLabel} />
+        <InspectionUploadOverlay open={loading} label={savingLabel} percent={uploadPercent} />
         <DialogHeader className="shrink-0 px-4 pt-5 pb-3 sm:px-6 sm:pt-6">
           <DialogTitle className="flex items-center gap-2">
             <LogIn className="h-5 w-5 text-primary" />
@@ -854,23 +878,18 @@ function CheckOutDialog({
   booking: Booking;
 }) {
   const queryClient = useQueryClient();
-  const { data: car } = useQuery({
-    queryKey: ["cars", booking.carId],
-    queryFn: () => carsApi.get(booking.carId),
-    enabled: open,
-  });
-  const { data: inspections } = useQuery({
-    queryKey: ["inspections", booking._id],
-    queryFn: () => inspectionsApi.listByBooking(booking._id),
-    enabled: open,
-  });
   const { data: detail } = useQuery({
     queryKey: ["bookings", booking._id, "detail"],
     queryFn: () => bookingsApi.getDetailById(booking._id),
     enabled: open,
   });
 
-  const checkInInspection = inspections?.find((insp) => insp.type === "check_in");
+  const car = detail?.car ?? booking.car ?? null;
+  const checkInInspection =
+    detail?.checkIn ??
+    detail?.inspections?.find((insp) => insp.type === "check_in") ??
+    booking.checkIn ??
+    booking.inspections?.find((insp) => insp.type === "check_in");
   const checkInMileage = checkInInspection?.mileage;
   const checkInFuelLevel = normalizeFuelLevel(checkInInspection?.fuelLevel);
   const dailyMileageLimit = car?.dailyMileageLimit ?? booking.bookedDailyMileageLimit ?? null;
@@ -909,6 +928,7 @@ function CheckOutDialog({
   const [chargeDescription, setChargeDescription] = useState("");
   const [loading, setLoading] = useState(false);
   const [savingLabel, setSavingLabel] = useState("Saving...");
+  const [uploadPercent, setUploadPercent] = useState<number | null>(null);
   const [fuelInitialized, setFuelInitialized] = useState(false);
   const [pendingAutoFuel, setPendingAutoFuel] = useState(false);
   const paymentAmountDirtyRef = useRef(false);
@@ -1060,6 +1080,7 @@ function CheckOutDialog({
     }
     setLoading(true);
     setSavingLabel("Uploading photos...");
+    setUploadPercent(0);
     try {
       await withUploadWakeLock(async () => {
       let imageUrls: string[] | undefined;
@@ -1067,9 +1088,8 @@ function CheckOutDialog({
       try {
         imageUrls = vehicleFiles.length > 0
           ? await uploadFiles(vehicleFiles, "inspections", (progress) => {
-              setSavingLabel(
-                `Uploading vehicle file ${progress.fileIndex} of ${progress.fileCount} (${progress.percent}%)`,
-              );
+              setSavingLabel(uploadProgressLabel("Uploading vehicle file", progress));
+              setUploadPercent(overallUploadPercent(progress));
             })
           : undefined;
       } catch (error) {
@@ -1078,6 +1098,7 @@ function CheckOutDialog({
       const checkoutCharges = syncAutoFuelChargeDrafts(chargeDrafts, checkInFuelLevel, fuelLevel);
 
       setSavingLabel("Saving check-out...");
+      setUploadPercent(null);
       const result = await createInspection.mutateAsync({
         carId: booking.carId,
         bookingId: booking._id,
@@ -1123,6 +1144,7 @@ function CheckOutDialog({
       toast.error(getApiErrorMessage(error) || "Failed to record check-out");
     } finally {
       setLoading(false);
+      setUploadPercent(null);
     }
   };
 
@@ -1132,7 +1154,7 @@ function CheckOutDialog({
         dismissible={false}
         className="flex w-[calc(100vw-1rem)] max-w-4xl flex-col gap-0 overflow-hidden p-0 max-h-[min(92vh,880px)]"
       >
-        <InspectionUploadOverlay open={loading} label={savingLabel} />
+        <InspectionUploadOverlay open={loading} label={savingLabel} percent={uploadPercent} />
         <DialogHeader className="shrink-0 px-4 pt-5 pb-3 sm:px-6 sm:pt-6">
           <DialogTitle className="flex items-center gap-2">
             <LogOut className="h-5 w-5 text-blue-400" />

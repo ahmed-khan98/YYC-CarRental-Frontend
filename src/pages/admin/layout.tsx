@@ -1,9 +1,9 @@
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { isFullAdminRole, isStaffRole, roleLabel } from "@/lib/roles.ts";
-import { formatDisplayName } from "@/lib/displayName.ts";
+import { formatActorDisplayName } from "@/lib/displayName.ts";
 import { Authenticated, Unauthenticated, AuthLoading } from "@/components/auth-gate.tsx";
 import { SignInButton } from "@/components/ui/signin.tsx";
-import { Skeleton } from "@/components/ui/skeleton.tsx";
+import { AdminShellSkeleton } from "@/components/page-skeleton.tsx";
 import { Card, CardContent } from "@/components/ui/card.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import { Badge } from "@/components/ui/badge.tsx";
@@ -40,7 +40,7 @@ function AdminContent() {
 
   if (!staffUser) {
     if (authLoading || isAuthenticated) {
-      return <div className="p-8"><Skeleton className="h-32 w-full" /></div>;
+      return <AdminShellSkeleton />;
     }
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
@@ -132,7 +132,7 @@ function AdminContent() {
         </nav>
         <div className="border-t border-border/50 p-3">
           <div className="mb-2 truncate px-1 text-xs text-muted-foreground">
-            {formatDisplayName(staffUser.name, "")}
+            {formatActorDisplayName(staffUser.name, staffUser.role, "")}
           </div>
           <Button
             variant="ghost"
@@ -175,7 +175,7 @@ function AdminContent() {
       </nav>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <div className="flex items-center justify-between border-b border-border/50 px-4 py-3 md:hidden">
+        <div className="flex items-center justify-between border-b border-border/50 px-2.5 py-2.5 md:hidden">
           <div className="flex items-center gap-3">
             <Link to="/" className="inline-flex cursor-pointer">
               <BrandLogo variant="sidebar" className="h-10" />
@@ -210,9 +210,7 @@ export default function AdminLayout() {
   return (
     <>
       <AuthLoading>
-        <div className="flex items-center justify-center min-h-screen">
-          <Skeleton className="h-32 w-64" />
-        </div>
+        <AdminShellSkeleton />
       </AuthLoading>
       <Unauthenticated>
         <div className="flex items-center justify-center min-h-screen">

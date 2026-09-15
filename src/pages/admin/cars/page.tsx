@@ -10,17 +10,20 @@ import { Label } from "@/components/ui/label.tsx";
 import { Badge } from "@/components/ui/badge.tsx";
 import { AdminDataTable, type AdminTableColumn } from "@/components/admin-data-table.tsx";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog.tsx";
+import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog.tsx";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select.tsx";
 import { Switch } from "@/components/ui/switch.tsx";
 import { getApiErrorMessage } from "@/api/client.ts";
 import { patchOptionalNumber, patchStringList, patchText } from "@/lib/patchPayload.ts";
 import { toast } from "sonner";
-import { Plus, Pencil, Trash2, Car as CarIcon, Upload, X, ImageIcon, CalendarDays } from "lucide-react";
+import { Plus, Pencil, Trash2, Car as CarIcon, Upload, X, ImageIcon, CalendarDays, Loader2 } from "lucide-react";
+import { UploadProgressStatus, overallUploadPercent, uploadProgressLabel } from "@/components/upload-progress.tsx";
 import { Hint } from "@/components/ui/tooltip.tsx";
 import { useAuth } from "@/hooks/use-auth.ts";
 import { canDeleteRecords } from "@/lib/roles.ts";
 import { formatCarName } from "@/lib/displayName.ts";
-import { carImageUrls, carPrimaryImage, resolveMediaUrl } from "@/lib/mediaUrl.ts";
+import { cn } from "@/lib/utils.ts";
+import { carImageUrls, carPrimaryImage, persistBrowserFile, resolveMediaUrl } from "@/lib/mediaUrl.ts";
 import {
   VEHICLE_TYPE_FILTER_OPTIONS,
   formatVehicleCategoryLabel,
@@ -81,9 +84,12 @@ export default function AdminCarsPage() {
   });
 
   const [open, setOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<Car | null>(null);
   const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState<CarForm>(EMPTY_FORM);
   const [loading, setLoading] = useState(false);
+  const [savingLabel, setSavingLabel] = useState("Saving...");
+  const [uploadPercent, setUploadPercent] = useState<number | null>(null);
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<"all" | DisplayVehicleCategory>("all");
 
@@ -148,12 +154,13 @@ export default function AdminCarsPage() {
   const handleMainImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    setMainImage(file);
-    setMainImagePreview(URL.createObjectURL(file));
+    const persisted = persistBrowserFile(file, "car-main");
+    setMainImage(persisted);
+    setMainImagePreview(URL.createObjectURL(persisted));
   };
 
   const handleAdditionalImagesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files ?? []).slice(0, 3);
+    const files = Array.from(e.target.files ?? []).slice(0, 3).map((file) => persistBrowserFile(file, "car"));
     setAdditionalImages(files);
     setAdditionalPreviews(files.map((f) => URL.createObjectURL(f)));
   };
@@ -164,22 +171,39 @@ export default function AdminCarsPage() {
       return;
     }
     setLoading(true);
+    setSavingLabel("Saving...");
     try {
-      // Upload new images if selected
       let imageUrls: string[] = [...existingImageUrls];
 
       if (mainImage || additionalImages.length > 0) {
-        const [mainUrl, ...additionalUrls] = await Promise.all([
-          mainImage ? uploadFile(mainImage, "cars") : Promise.resolve(null),
-          ...additionalImages.map((f) => uploadFile(f, "cars")),
-        ]);
+        const queued = [
+          ...(mainImage ? [{ file: mainImage, kind: "main" as const }] : []),
+          ...additionalImages.map((file) => ({ file, kind: "extra" as const })),
+        ];
+        const uploaded: { kind: "main" | "extra"; url: string }[] = [];
+        for (let i = 0; i < queued.length; i += 1) {
+          setSavingLabel(uploadProgressLabel("Uploading image", { fileIndex: i + 1, fileCount: queued.length, percent: 0 }));
+          setUploadPercent(overallUploadPercent({ fileIndex: i + 1, fileCount: queued.length, percent: 0 }));
+          uploaded.push({
+            kind: queued[i].kind,
+            url: await uploadFile(queued[i].file, "cars", (progress) => {
+              const next = { fileIndex: i + 1, fileCount: queued.length, percent: progress.percent };
+              setSavingLabel(uploadProgressLabel("Uploading image", next));
+              setUploadPercent(overallUploadPercent(next));
+            }),
+          });
+        }
+        const mainUrl = uploaded.find((item) => item.kind === "main")?.url ?? null;
+        const additionalUrls = uploaded.filter((item) => item.kind === "extra").map((item) => item.url);
         if (mainUrl) {
           imageUrls = [mainUrl, ...imageUrls.slice(1)];
         }
-        if (additionalImages.length > 0) {
+        if (additionalUrls.length > 0) {
           imageUrls = [imageUrls[0], ...additionalUrls].filter(Boolean);
         }
       }
+      setSavingLabel("Saving car...");
+      setUploadPercent(null);
 
       const payload = {
         make: form.make, model: form.model, year: Number(form.year),
@@ -208,14 +232,16 @@ export default function AdminCarsPage() {
       toast.error(getApiErrorMessage(err));
     } finally {
       setLoading(false);
+      setUploadPercent(null);
     }
   };
 
-  const handleDelete = async (carId: string) => {
-    if (!confirm("Delete this car?")) return;
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
     try {
-      await removeCar.mutateAsync(carId);
+      await removeCar.mutateAsync(deleteTarget._id);
       toast.success("Car deleted");
+      setDeleteTarget(null);
     } catch {
       toast.error("Failed to delete car");
     }
@@ -273,7 +299,15 @@ export default function AdminCarsPage() {
       id: "status",
       header: "Status",
       cell: (car) => (
-        <Badge className={car.isAvailable ? "bg-primary/20 text-primary border-primary/30 text-[10px]" : "bg-destructive/20 text-destructive border-destructive/30 text-[10px]"}>
+        <Badge
+          variant="outline"
+          className={cn(
+            "text-[11px] font-medium border",
+            car.isAvailable
+              ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+              : "bg-red-50 text-red-700 border-red-200",
+          )}
+        >
           {car.isAvailable ? "Available" : "Unavailable"}
         </Badge>
       ),
@@ -313,7 +347,7 @@ export default function AdminCarsPage() {
           </Hint>
           {canDelete && (
           <Hint label="Delete car">
-            <Button variant="ghost" size="icon" onClick={() => handleDelete(car._id)} className="cursor-pointer h-8 w-8 text-destructive hover:text-destructive" aria-label="Delete car">
+            <Button variant="ghost" size="icon" onClick={() => setDeleteTarget(car)} className="cursor-pointer h-8 w-8 text-destructive hover:text-destructive" aria-label="Delete car">
               <Trash2 className="h-4 w-4" />
             </Button>
           </Hint>
@@ -372,12 +406,18 @@ export default function AdminCarsPage() {
       )}
 
       {/* Create/Edit Dialog */}
-      <Dialog open={open} onOpenChange={setOpen}>
+      <Dialog
+        open={open}
+        onOpenChange={(next) => {
+          if (loading) return;
+          setOpen(next);
+        }}
+      >
         <DialogContent className="max-w-3xl sm:max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editId ? "Edit Car" : "Add New Car"}</DialogTitle>
           </DialogHeader>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {([["make", "Make *"], ["model", "Model *"], ["year", "Year *"], ["dailyRate", "Daily Rate ($) *"]] as const).map(([key, label]) => (
               <div key={key} className="min-w-0 space-y-1">
                 <Label className="text-xs">{label}</Label>
@@ -453,7 +493,7 @@ export default function AdminCarsPage() {
             ))}
 
             {/* Main Image Upload */}
-            <div className="col-span-2 space-y-2">
+            <div className="sm:col-span-2 space-y-2">
               <Label className="text-xs flex items-center gap-1">
                 <ImageIcon className="h-3 w-3" /> Main Image
               </Label>
@@ -483,7 +523,7 @@ export default function AdminCarsPage() {
             </div>
 
             {/* Additional Images Upload */}
-            <div className="col-span-2 space-y-2">
+            <div className="sm:col-span-2 space-y-2">
               <Label className="text-xs flex items-center gap-1">
                 <ImageIcon className="h-3 w-3" /> Additional Images (up to 3)
               </Label>
@@ -515,11 +555,11 @@ export default function AdminCarsPage() {
               )}
             </div>
 
-            <div className="col-span-2 space-y-1">
+            <div className="sm:col-span-2 space-y-1">
               <Label className="text-xs">Features (comma-separated)</Label>
               <Input value={form.features} onChange={f("features")} placeholder="AC, Bluetooth, GPS..." />
             </div>
-            <div className="col-span-2 space-y-1">
+            <div className="sm:col-span-2 space-y-1">
               <Label className="text-xs">Description</Label>
               <textarea
                 className="w-full bg-input border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring resize-none"
@@ -530,14 +570,39 @@ export default function AdminCarsPage() {
               />
             </div>
           </div>
-          <DialogFooter>
-            <Button variant="secondary" onClick={() => setOpen(false)} className="cursor-pointer">Cancel</Button>
+          <DialogFooter className="flex-col gap-3 sm:flex-col">
+            {loading && (
+              <UploadProgressStatus label={savingLabel} percent={uploadPercent} />
+            )}
+            <div className="flex w-full flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <Button variant="secondary" onClick={() => setOpen(false)} disabled={loading} className="cursor-pointer">Cancel</Button>
             <Button onClick={handleSave} disabled={loading} className="cursor-pointer">
-              {loading ? "Saving..." : "Save Car"}
+              {loading ? (
+                <span className="inline-flex items-center gap-2">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  {savingLabel}
+                </span>
+              ) : (
+                "Save Car"
+              )}
             </Button>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDeleteDialog
+        open={Boolean(deleteTarget)}
+        onOpenChange={(next) => !next && setDeleteTarget(null)}
+        title="Delete this car?"
+        description={
+          deleteTarget
+            ? `This will permanently remove "${formatCarName(deleteTarget)}". This action cannot be undone.`
+            : ""
+        }
+        loading={removeCar.isPending}
+        onConfirm={handleDelete}
+      />
     </div>
   );
 }
