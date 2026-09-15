@@ -109,7 +109,7 @@ export function LicenseImageCapture({
     event.stopPropagation();
     resetDragState();
     const files = Array.from(event.dataTransfer.files);
-    const image = files.find((file) => file.type.startsWith("image/"));
+    const image = files.find((file) => isLikelyImageFile(file));
     if (!image) {
       toast.error("Please drop an image file");
       return;

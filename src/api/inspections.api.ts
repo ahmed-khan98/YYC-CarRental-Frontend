@@ -60,7 +60,14 @@ export const inspectionsApi = {
       signal,
     });
     if (!response.ok) {
-      throw new Error("Failed to load agreement PDF");
+      let message = "Failed to load agreement PDF";
+      try {
+        const data = (await response.json()) as { message?: string };
+        if (data?.message) message = data.message;
+      } catch {
+        // keep default when the body is not JSON
+      }
+      throw new Error(message);
     }
     const blob = await response.blob();
     const header = await blob.slice(0, 5).text();

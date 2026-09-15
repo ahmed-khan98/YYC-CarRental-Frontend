@@ -10,6 +10,10 @@ function asPdfBlob(blob: Blob, filename: string) {
 }
 
 export function openPdfUrl(url: string, filename: string) {
+  if (isMobileBrowser()) {
+    const opened = window.open(url, "_blank", "noopener,noreferrer");
+    if (opened) return;
+  }
   const link = document.createElement("a");
   link.href = url;
   link.download = filename;

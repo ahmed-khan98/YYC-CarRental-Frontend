@@ -192,7 +192,7 @@ export default function AdminCarsPage() {
         mileage: patchOptionalNumber(form.mileage),
         description: patchText(form.description),
         features: patchStringList(form.features),
-        imageUrls,
+        imageUrls: imageUrls.map((url) => resolveMediaUrl(url)).filter(Boolean),
       };
 
       if (editId) {

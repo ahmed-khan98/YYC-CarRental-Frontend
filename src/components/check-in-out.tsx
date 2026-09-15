@@ -7,6 +7,7 @@ import { uploadFile, uploadFiles } from "@/api/upload.api.ts";
 import { CarMediaCapture } from "@/components/car-media-capture.tsx";
 import { LicenseImageCapture } from "@/components/license-image-capture.tsx";
 import { getApiErrorMessage } from "@/api/client.ts";
+import { resolveMediaUrl } from "@/lib/mediaUrl.ts";
 import type { Booking, ExtraDriverCheckInDetail, FuelLevel, MainDriverCheckInDetail } from "@/types/index.ts";
 import { calculateExtraMileageBilling } from "@/lib/extraMileage.ts";
 import { calculateRentalDays, formatMoney } from "@/lib/rentalPricing.ts";
@@ -116,6 +117,7 @@ function CheckInDialog({
   const [fuelLevel, setFuelLevel] = useState<FuelLevel>("full");
   const [notes, setNotes] = useState("");
   const [carMediaFiles, setCarMediaFiles] = useState<File[]>([]);
+  const [carMediaPreparing, setCarMediaPreparing] = useState(false);
   const [signatureDataUrl, setSignatureDataUrl] = useState<string | null>(null);
   const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
   const [pdfLoadError, setPdfLoadError] = useState(false);
@@ -163,6 +165,7 @@ function CheckInDialog({
     setFuelLevel("full");
     setNotes("");
     setCarMediaFiles([]);
+    setCarMediaPreparing(false);
     setSignatureDataUrl(null);
     setPdfPreviewUrl(null);
     setPdfLoadError(false);
@@ -330,36 +333,30 @@ function CheckInDialog({
     };
   }, [open, activeTab, booking._id, mainDriver, mileage, fuelLevel, notes, extraDrivers, paymentAmount]);
 
-  const handleContinueToSignature = () => {
-    if (!mileage) {
-      toast.error("Please enter mileage");
-      return;
-    }
+  const validateCheckInForm = () => {
+    if (carMediaPreparing) return "Please wait — photos are still being prepared";
+    if (!mileage) return "Please enter mileage";
     const mainDriverError = validateMainDriverCheckInDetails(mainDriver);
-    if (mainDriverError) {
-      toast.error(mainDriverError);
-      return;
-    }
+    if (mainDriverError) return mainDriverError;
     const driverError = validateExtraDriverCheckInDetails(
       extraDriverCount,
       extraDrivers,
       extraLicenseImagesRef.current,
     );
-    if (driverError) {
-      toast.error(driverError);
-      return;
-    }
-    if (!mainLicenseImageRef.current.file) {
-      toast.error("Main driver: license image is required");
-      return;
-    }
+    if (driverError) return driverError;
+    if (!mainLicenseImageRef.current.file) return "Main driver: license image is required";
     const paid = Number(paymentAmount);
-    if (paymentAmount && (!Number.isFinite(paid) || paid < 0)) {
-      toast.error("Enter a valid amount paid");
-      return;
-    }
+    if (paymentAmount && (!Number.isFinite(paid) || paid < 0)) return "Enter a valid amount paid";
     if (Number.isFinite(paid) && checkInBill.totalBill > 0 && paid > checkInBill.totalBill) {
-      toast.error(`Amount paid cannot exceed ${formatMoney(checkInBill.totalBill)}`);
+      return `Amount paid cannot exceed ${formatMoney(checkInBill.totalBill)}`;
+    }
+    return null;
+  };
+
+  const handleContinueToSignature = () => {
+    const formError = validateCheckInForm();
+    if (formError) {
+      toast.error(formError);
       return;
     }
     setActiveTab("signature");
@@ -371,22 +368,10 @@ function CheckInDialog({
       toast.error("Please provide a customer signature");
       return;
     }
-    const driverError = validateExtraDriverCheckInDetails(
-      extraDriverCount,
-      extraDrivers,
-      extraLicenseImagesRef.current,
-    );
-    if (driverError) {
-      toast.error(driverError);
-      return;
-    }
-    if (!mainLicenseImageRef.current.file) {
-      toast.error("Main driver: license image is required");
-      return;
-    }
-    const paid = Number(paymentAmount);
-    if (Number.isFinite(paid) && checkInBill.totalBill > 0 && paid > checkInBill.totalBill) {
-      toast.error(`Amount paid cannot exceed ${formatMoney(checkInBill.totalBill)}`);
+    const formError = validateCheckInForm();
+    if (formError) {
+      toast.error(formError);
+      setActiveTab("form");
       return;
     }
 
@@ -444,7 +429,7 @@ function CheckInDialog({
         mileage: Number(mileage),
         fuelLevel,
         notes: notes || undefined,
-        imageUrls,
+        imageUrls: imageUrls?.map((url) => resolveMediaUrl(url)),
         signatureDataUrl,
         mainDriver: {
           fullLegalName: mainDriver.fullLegalName.trim(),
@@ -456,7 +441,7 @@ function CheckInDialog({
           issuingProvince: mainDriver.issuingProvince.trim(),
           licenseExpiryDate: mainDriver.licenseExpiryDate.trim(),
           policyNo: mainDriver.policyNo.trim(),
-          licenseImageUrl: mainLicenseImageUrl,
+          licenseImageUrl: resolveMediaUrl(mainLicenseImageUrl),
         },
         extraDrivers: extraDriverCount > 0
           ? extraDrivers.map((driver, index) => ({
@@ -464,7 +449,7 @@ function CheckInDialog({
               licenseNumber: driver.licenseNumber.trim(),
               licenseExpiryDate: driver.licenseExpiryDate.trim(),
               countryOfIssue: driver.countryOfIssue.trim(),
-              licenseImageUrl: extraLicenseImageUrls[index],
+              licenseImageUrl: resolveMediaUrl(extraLicenseImageUrls[index]),
             }))
           : undefined,
         paymentEntry: paymentAmount
@@ -703,6 +688,7 @@ function CheckInDialog({
               id="check-in-car-media"
               files={carMediaFiles}
               onChange={setCarMediaFiles}
+              onPreparingChange={setCarMediaPreparing}
             />
             <div className="space-y-1.5">
               <Label className="text-xs">Notes</Label>
@@ -871,6 +857,7 @@ function CheckOutDialog({
   const [fuelLevel, setFuelLevel] = useState<FuelLevel>("full");
   const [notes, setNotes] = useState("");
   const [carMediaFiles, setCarMediaFiles] = useState<File[]>([]);
+  const [carMediaPreparing, setCarMediaPreparing] = useState(false);
   const [paymentAmount, setPaymentAmount] = useState("");
   const [paymentDescription, setPaymentDescription] = useState("");
   const [chargeDrafts, setChargeDrafts] = useState<CheckoutChargeDraft[]>([]);
@@ -918,6 +905,7 @@ function CheckOutDialog({
       setFuelLevel("full");
       setNotes("");
       setCarMediaFiles([]);
+      setCarMediaPreparing(false);
       paymentAmountDirtyRef.current = false;
       setPaymentAmount("");
       setPaymentDescription("");
@@ -1024,16 +1012,25 @@ function CheckOutDialog({
       toast.error(`Amount paid cannot exceed ${formatMoney(checkoutBalance.totalUnpaid)}`);
       return;
     }
+    if (carMediaPreparing) {
+      toast.error("Please wait — photos are still being prepared");
+      return;
+    }
     setLoading(true);
     setSavingLabel("Uploading photos...");
     try {
-      const imageUrls = carMediaFiles.length > 0
-        ? await uploadFiles(carMediaFiles, "inspections", (progress) => {
-            setSavingLabel(
-              `Uploading vehicle file ${progress.fileIndex} of ${progress.fileCount} (${progress.percent}%)`,
-            );
-          })
-        : undefined;
+      let imageUrls: string[] | undefined;
+      try {
+        imageUrls = carMediaFiles.length > 0
+          ? await uploadFiles(carMediaFiles, "inspections", (progress) => {
+              setSavingLabel(
+                `Uploading vehicle file ${progress.fileIndex} of ${progress.fileCount} (${progress.percent}%)`,
+              );
+            })
+          : undefined;
+      } catch (error) {
+        throw new Error(getApiErrorMessage(error) || "Failed to upload vehicle photos or videos");
+      }
       const checkoutCharges = syncAutoFuelChargeDrafts(chargeDrafts, checkInFuelLevel, fuelLevel);
 
       setSavingLabel("Saving check-out...");
@@ -1044,7 +1041,7 @@ function CheckOutDialog({
         mileage: Number(mileage),
         fuelLevel,
         notes: notes || undefined,
-        imageUrls,
+        imageUrls: imageUrls?.map((url) => resolveMediaUrl(url)),
         chargeEntries: checkoutCharges.length
           ? checkoutCharges.map(({ title, amount, description }) => ({
               title,
@@ -1268,6 +1265,7 @@ function CheckOutDialog({
             id="check-out-car-media"
             files={carMediaFiles}
             onChange={setCarMediaFiles}
+            onPreparingChange={setCarMediaPreparing}
           />
           <div className="space-y-1.5 pb-1">
             <Label className="text-xs">Notes</Label>

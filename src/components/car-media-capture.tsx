@@ -55,10 +55,12 @@ export function CarMediaCapture({
   id,
   files,
   onChange,
+  onPreparingChange,
 }: {
   id: string;
   files: File[];
   onChange: (files: File[]) => void;
+  onPreparingChange?: (preparing: boolean) => void;
 }) {
   const uploadRef = useRef<HTMLInputElement>(null);
   const photoFallbackRef = useRef<HTMLInputElement>(null);
@@ -73,10 +75,25 @@ export function CarMediaCapture({
   const [recording, setRecording] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
+  const [preparing, setPreparing] = useState(false);
   const [previews, setPreviews] = useState<PreviewItem[]>([]);
   const dragDepthRef = useRef(0);
+  const preparingCountRef = useRef(0);
 
   filesRef.current = files;
+
+  const beginPrepare = () => {
+    preparingCountRef.current += 1;
+    setPreparing(true);
+    onPreparingChange?.(true);
+  };
+
+  const endPrepare = () => {
+    preparingCountRef.current = Math.max(0, preparingCountRef.current - 1);
+    const busy = preparingCountRef.current > 0;
+    setPreparing(busy);
+    onPreparingChange?.(busy);
+  };
 
   const imageCount = useMemo(
     () => files.filter((file) => mediaKindFromFile(file) === "image").length,
@@ -133,6 +150,8 @@ export function CarMediaCapture({
   }, [recording]);
 
   const addFiles = async (incoming: File[]) => {
+    beginPrepare();
+    try {
     const prepared: File[] = [];
     for (const file of incoming) {
       prepared.push(
@@ -188,6 +207,9 @@ export function CarMediaCapture({
       const next = [...current, ...added];
       filesRef.current = next;
       onChange(next);
+    }
+    } finally {
+      endPrepare();
     }
   };
 
@@ -356,6 +378,9 @@ export function CarMediaCapture({
       <p className="text-[11px] text-muted-foreground">
         Photos are compressed on the phone. Recorded videos are 720p and stop at {MAX_RECORD_SECONDS} seconds so they upload on mobile.
       </p>
+      {preparing ? (
+        <p className="text-[11px] font-medium text-primary">Preparing photos…</p>
+      ) : null}
 
       {cameraMode ? (
         <div className="space-y-2 rounded-lg border border-border/50 bg-background/70 p-2">

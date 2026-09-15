@@ -1,3 +1,5 @@
+import { mediaKindFromFile } from "@/lib/mediaUrl.ts";
+
 const MAX_EDGE = 1280;
 const TARGET_IMAGE_BYTES = 450_000;
 const MIN_QUALITY = 0.52;
@@ -46,7 +48,11 @@ export async function snapshotVideoFrame(video: HTMLVideoElement, filename: stri
 }
 
 export async function compressImageForUpload(file: File): Promise<File> {
-  if (!file.type.startsWith("image/") || file.type === "image/gif" || file.type === "image/svg+xml") {
+  const kind = mediaKindFromFile(file);
+  if (kind === "video" || file.type === "image/gif" || file.type === "image/svg+xml") {
+    return file;
+  }
+  if (kind !== "image" && file.type) {
     return file;
   }
 

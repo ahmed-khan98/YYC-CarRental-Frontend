@@ -16,6 +16,7 @@ import { patchText } from "@/lib/patchPayload.ts";
 import { motion } from "motion/react";
 import { User, Phone, FileText, Upload, CheckCircle, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge.tsx";
+import { getApiErrorMessage } from "@/api/client.ts";
 import { resolveMediaUrl } from "@/lib/mediaUrl.ts";
 
 function ProfileInner() {
@@ -69,8 +70,8 @@ function ProfileInner() {
       });
       setLicenseFile(null);
       toast.success("Profile updated successfully");
-    } catch {
-      toast.error("Failed to update profile");
+    } catch (error) {
+      toast.error(getApiErrorMessage(error) || "Failed to update profile");
     } finally {
       setLoading(false);
     }
@@ -160,7 +161,7 @@ function ProfileInner() {
           >
             {licensePreview ? (
               <div className="relative">
-                {licenseFile?.type.startsWith("image/") || (currentUser?.licenseUrl && !licenseFile) ? (
+                {!licenseFile || (!/\.pdf$/i.test(licenseFile.name) && !licenseFile.type.includes("pdf")) ? (
                   <img src={resolveMediaUrl(licensePreview)} alt="License" className="w-full h-40 object-contain rounded-lg" />
                 ) : (
                   <div className="h-40 flex items-center justify-center">
