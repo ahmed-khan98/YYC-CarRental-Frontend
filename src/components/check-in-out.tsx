@@ -41,8 +41,35 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { SignaturePad } from "@/components/signature-pad.tsx";
 import { AgreementPdfPreview } from "@/components/agreement-pdf-preview.tsx";
 import { toast } from "sonner";
-import { LogIn, LogOut, SlidersHorizontal, Eye, EyeOff, Users, UserRound, Plus, Trash2 } from "lucide-react";
+import { LogIn, LogOut, SlidersHorizontal, Eye, EyeOff, Users, UserRound, Plus, Trash2, Loader2 } from "lucide-react";
 import { Hint } from "@/components/ui/tooltip.tsx";
+
+async function withUploadWakeLock<T>(run: () => Promise<T>): Promise<T> {
+  let lock: WakeLockSentinel | null = null;
+  try {
+    lock = (await navigator.wakeLock?.request("screen")) ?? null;
+  } catch {
+    // Older phones may not support keeping the screen awake.
+  }
+  try {
+    return await run();
+  } finally {
+    await lock?.release().catch(() => {});
+  }
+}
+
+function InspectionUploadOverlay({ open, label }: { open: boolean; label: string }) {
+  if (!open) return null;
+  return (
+    <div className="absolute inset-0 z-50 flex flex-col items-center justify-center gap-3 bg-background/85 px-6 text-center backdrop-blur-[2px]">
+      <Loader2 className="h-9 w-9 animate-spin text-primary" />
+      <p className="text-sm font-semibold">{label}</p>
+      <p className="text-xs text-muted-foreground">
+        Photos and videos are uploading. Keep this screen open until it finishes.
+      </p>
+    </div>
+  );
+}
 
 function invalidateAfterInspectionChange(
   queryClient: QueryClient,
@@ -118,6 +145,8 @@ function CheckInDialog({
   const [notes, setNotes] = useState("");
   const [carMediaFiles, setCarMediaFiles] = useState<File[]>([]);
   const [carMediaPreparing, setCarMediaPreparing] = useState(false);
+  const carMediaFilesRef = useRef(carMediaFiles);
+  carMediaFilesRef.current = carMediaFiles;
   const [signatureDataUrl, setSignatureDataUrl] = useState<string | null>(null);
   const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
   const [pdfLoadError, setPdfLoadError] = useState(false);
@@ -378,10 +407,12 @@ function CheckInDialog({
     setLoading(true);
     setSavingLabel("Uploading photos...");
     try {
+      await withUploadWakeLock(async () => {
       let imageUrls: string[] | undefined;
+      const vehicleFiles = carMediaFilesRef.current;
       try {
-        imageUrls = carMediaFiles.length > 0
-          ? await uploadFiles(carMediaFiles, "inspections", (progress) => {
+        imageUrls = vehicleFiles.length > 0
+          ? await uploadFiles(vehicleFiles, "inspections", (progress) => {
               setSavingLabel(
                 `Uploading vehicle file ${progress.fileIndex} of ${progress.fileCount} (${progress.percent}%)`,
               );
@@ -429,7 +460,7 @@ function CheckInDialog({
         mileage: Number(mileage),
         fuelLevel,
         notes: notes || undefined,
-        imageUrls: imageUrls?.map((url) => resolveMediaUrl(url)),
+        imageUrls: imageUrls?.map((url) => resolveMediaUrl(url)).filter(Boolean),
         signatureDataUrl,
         mainDriver: {
           fullLegalName: mainDriver.fullLegalName.trim(),
@@ -465,6 +496,7 @@ function CheckInDialog({
       await invalidateAfterInspectionChange(queryClient, booking._id, booking.carId);
       toast.success("Check-in completed with signed agreement");
       onClose();
+      });
     } catch (error) {
       toast.error(getApiErrorMessage(error) || "Failed to complete check-in");
     } finally {
@@ -473,11 +505,12 @@ function CheckInDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={(nextOpen) => { if (nextOpen) return; onClose(); }}>
+    <Dialog open={open} onOpenChange={(nextOpen) => { if (nextOpen || loading) return; onClose(); }}>
       <DialogContent
         dismissible={false}
-        className="flex w-[calc(100vw-1rem)] max-w-4xl flex-col gap-0 overflow-hidden p-0 max-h-[min(92vh,880px)]"
+        className="relative flex w-[calc(100vw-1rem)] max-w-4xl flex-col gap-0 overflow-hidden p-0 max-h-[min(92vh,880px)]"
       >
+        <InspectionUploadOverlay open={loading} label={savingLabel} />
         <DialogHeader className="shrink-0 px-4 pt-5 pb-3 sm:px-6 sm:pt-6">
           <DialogTitle className="flex items-center gap-2">
             <LogIn className="h-5 w-5 text-primary" />
@@ -789,11 +822,18 @@ function CheckInDialog({
             <SignaturePad onChange={setSignatureDataUrl} />
 
             <DialogFooter className="pt-2 pb-1">
-              <Button variant="secondary" onClick={() => setActiveTab("form")} className="cursor-pointer">
+              <Button variant="secondary" onClick={() => setActiveTab("form")} disabled={loading} className="cursor-pointer">
                 Back
               </Button>
               <Button onClick={handleCompleteCheckIn} disabled={loading || !signatureDataUrl} className="cursor-pointer">
-                {loading ? savingLabel : "Complete Check-In"}
+                {loading ? (
+                  <span className="inline-flex items-center gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    {savingLabel}
+                  </span>
+                ) : (
+                  "Complete Check-In"
+                )}
               </Button>
             </DialogFooter>
           </TabsContent>
@@ -858,6 +898,8 @@ function CheckOutDialog({
   const [notes, setNotes] = useState("");
   const [carMediaFiles, setCarMediaFiles] = useState<File[]>([]);
   const [carMediaPreparing, setCarMediaPreparing] = useState(false);
+  const carMediaFilesRef = useRef(carMediaFiles);
+  carMediaFilesRef.current = carMediaFiles;
   const [paymentAmount, setPaymentAmount] = useState("");
   const [paymentDescription, setPaymentDescription] = useState("");
   const [chargeDrafts, setChargeDrafts] = useState<CheckoutChargeDraft[]>([]);
@@ -1019,10 +1061,12 @@ function CheckOutDialog({
     setLoading(true);
     setSavingLabel("Uploading photos...");
     try {
+      await withUploadWakeLock(async () => {
       let imageUrls: string[] | undefined;
+      const vehicleFiles = carMediaFilesRef.current;
       try {
-        imageUrls = carMediaFiles.length > 0
-          ? await uploadFiles(carMediaFiles, "inspections", (progress) => {
+        imageUrls = vehicleFiles.length > 0
+          ? await uploadFiles(vehicleFiles, "inspections", (progress) => {
               setSavingLabel(
                 `Uploading vehicle file ${progress.fileIndex} of ${progress.fileCount} (${progress.percent}%)`,
               );
@@ -1041,7 +1085,7 @@ function CheckOutDialog({
         mileage: Number(mileage),
         fuelLevel,
         notes: notes || undefined,
-        imageUrls: imageUrls?.map((url) => resolveMediaUrl(url)),
+        imageUrls: imageUrls?.map((url) => resolveMediaUrl(url)).filter(Boolean),
         chargeEntries: checkoutCharges.length
           ? checkoutCharges.map(({ title, amount, description }) => ({
               title,
@@ -1074,6 +1118,7 @@ function CheckOutDialog({
       } else {
         toast.success("Check-out recorded and vehicle mileage updated");
       }
+      });
     } catch (error) {
       toast.error(getApiErrorMessage(error) || "Failed to record check-out");
     } finally {
@@ -1082,11 +1127,12 @@ function CheckOutDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={(nextOpen) => { if (nextOpen) return; onClose(); }}>
+    <Dialog open={open} onOpenChange={(nextOpen) => { if (nextOpen || loading) return; onClose(); }}>
       <DialogContent
         dismissible={false}
-        className="flex w-[calc(100vw-1rem)] max-w-4xl flex-col gap-0 overflow-hidden p-0 max-h-[min(92vh,880px)]"
+        className="relative flex w-[calc(100vw-1rem)] max-w-4xl flex-col gap-0 overflow-hidden p-0 max-h-[min(92vh,880px)]"
       >
+        <InspectionUploadOverlay open={loading} label={savingLabel} />
         <DialogHeader className="shrink-0 px-4 pt-5 pb-3 sm:px-6 sm:pt-6">
           <DialogTitle className="flex items-center gap-2">
             <LogOut className="h-5 w-5 text-blue-400" />
@@ -1369,9 +1415,16 @@ function CheckOutDialog({
           </div>
         </div>
         <DialogFooter className="shrink-0 gap-2 border-t border-border/50 px-4 py-3 sm:px-6 sm:py-4">
-          <Button variant="secondary" onClick={onClose} className="cursor-pointer">Cancel</Button>
+          <Button variant="secondary" onClick={onClose} disabled={loading} className="cursor-pointer">Cancel</Button>
           <Button onClick={handleSubmit} disabled={loading} className="cursor-pointer">
-            {loading ? savingLabel : "Record Check-Out"}
+            {loading ? (
+              <span className="inline-flex items-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                {savingLabel}
+              </span>
+            ) : (
+              "Record Check-Out"
+            )}
           </Button>
         </DialogFooter>
       </DialogContent>

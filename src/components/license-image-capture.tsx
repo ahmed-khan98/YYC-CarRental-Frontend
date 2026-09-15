@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button.tsx";
 import { Label } from "@/components/ui/label.tsx";
 import { cn } from "@/lib/utils.ts";
 import { resolveMediaUrl } from "@/lib/mediaUrl.ts";
-import { snapshotVideoFrame } from "@/lib/compressImage.ts";
+import { compressImageForUpload, snapshotVideoFrame } from "@/lib/compressImage.ts";
 import { toast } from "sonner";
 
 const MAX_LICENSE_BYTES = 50 * 1024 * 1024;
@@ -75,8 +75,12 @@ export function LicenseImageCapture({
 
   const handleFile = (file: File | undefined | null) => {
     if (!acceptImageFile(file)) return;
-    onSelect(stabilizeImageFile(file));
+    const stable = stabilizeImageFile(file);
+    onSelect(stable);
     closeCamera();
+    void compressImageForUpload(stable).then((next) => {
+      if (next.size < stable.size) onSelect(next);
+    });
   };
 
   const resetDragState = () => {

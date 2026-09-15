@@ -3,7 +3,7 @@ import { Camera, FolderUp, Upload, Video, X } from "lucide-react";
 import { Button } from "@/components/ui/button.tsx";
 import { Label } from "@/components/ui/label.tsx";
 import { cn } from "@/lib/utils.ts";
-import { mediaKindFromFile } from "@/lib/mediaUrl.ts";
+import { mediaKindFromFile, persistBrowserFile } from "@/lib/mediaUrl.ts";
 import { compressImageForUpload, snapshotVideoFrame } from "@/lib/compressImage.ts";
 import { toast } from "sonner";
 
@@ -154,8 +154,9 @@ export function CarMediaCapture({
     try {
     const prepared: File[] = [];
     for (const file of incoming) {
+      const persisted = persistBrowserFile(file);
       prepared.push(
-        mediaKindFromFile(file) === "image" ? await compressImageForUpload(file) : file,
+        mediaKindFromFile(persisted) === "image" ? await compressImageForUpload(persisted) : persisted,
       );
     }
     incoming = prepared;
@@ -376,7 +377,7 @@ export function CarMediaCapture({
         Car photos & videos (optional, up to {MAX_CAR_IMAGES} photos and {MAX_CAR_VIDEOS} videos)
       </Label>
       <p className="text-[11px] text-muted-foreground">
-        Photos are compressed on the phone. Recorded videos are 720p and stop at {MAX_RECORD_SECONDS} seconds so they upload on mobile.
+        Upload from the device gallery, or capture a photo/video with the camera.
       </p>
       {preparing ? (
         <p className="text-[11px] font-medium text-primary">Preparing photos…</p>

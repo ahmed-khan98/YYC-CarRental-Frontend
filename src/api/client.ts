@@ -178,10 +178,10 @@ apiClient.interceptors.response.use(
 export function getApiErrorMessage(error: unknown): string {
   if (axios.isAxiosError(error)) {
     if (error.code === "ECONNABORTED") {
-      return "The request timed out. Photos or videos may be too large — try again with smaller files.";
+      return "The upload timed out. Check your connection and try again — the video will resume in smaller pieces.";
     }
     if (error.code === "ERR_NETWORK" || !error.response) {
-      return "Could not reach the server. Check your connection, then try again. If this continues, the upload may be too large for the server proxy.";
+      return "Upload interrupted. Check your phone connection and try again. Videos are uploaded in small pieces.";
     }
     const data = error.response?.data as { message?: string } | undefined;
     return data?.message ?? error.message;

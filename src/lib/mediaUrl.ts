@@ -56,6 +56,15 @@ export function carPrimaryImage(
   return carImageUrls(car)[0] || fallback || "";
 }
 
+export function persistBrowserFile(file: File, fallbackName = "media"): File {
+  const kind = mediaKindFromFile(file);
+  const type =
+    file.type ||
+    (kind === "video" ? "video/mp4" : kind === "image" ? "image/jpeg" : "application/octet-stream");
+  const name = file.name?.trim() || `${fallbackName}-${Date.now()}`;
+  return new File([file], name, { type, lastModified: file.lastModified || Date.now() });
+}
+
 export function mediaKindFromFile(file: File): "image" | "video" | null {
   if (file.type.startsWith("image/")) return "image";
   if (file.type.startsWith("video/")) return "video";
