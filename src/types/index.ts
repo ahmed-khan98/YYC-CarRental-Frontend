@@ -138,6 +138,37 @@ export interface Car {
   _creationTime: number;
 }
 
+/** Frozen identity fields stored on a booking after the live car is edited or soft-deleted. */
+export type CarSnapshot = Pick<
+  Car,
+  "make" | "model" | "year" | "category" | "licensePlate" | "color"
+>;
+
+/** Car payload embedded on a booking — display fields only, no vin/_creationTime. */
+export type BookingCar = Pick<
+  Car,
+  | "_id"
+  | "make"
+  | "model"
+  | "year"
+  | "licensePlate"
+  | "color"
+  | "category"
+  | "transmission"
+  | "fuelType"
+  | "seats"
+  | "dailyRate"
+  | "imageUrl"
+  | "imageUrls"
+  | "mileage"
+  | "isAvailable"
+  | "dailyMileageLimit"
+  | "chargePerExtraKm"
+>;
+
+/** Live fleet car, booking embed, or frozen snapshot — enough for booking UI. */
+export type DisplayCar = CarSnapshot & Partial<Car>;
+
 export interface Location {
   _id: string;
   name: string;
@@ -175,7 +206,7 @@ export interface Booking {
   bookedDailyRate?: number;
   bookedDailyMileageLimit?: number;
   bookedChargePerExtraKm?: number;
-  carSnapshot?: Pick<Car, "make" | "model" | "year" | "category" | "licensePlate" | "color"> | null;
+  carSnapshot?: CarSnapshot | null;
   serviceSnapshots?: BookingServiceSnapshot[];
   checkInMileage?: number;
   checkOutMileage?: number;
@@ -224,26 +255,7 @@ export interface Booking {
   checkInPerformedBy?: BookingActorInfo | null;
   checkOutPerformedBy?: BookingActorInfo | null;
   user?: User | null;
-  car?: Pick<
-    Car,
-    | "_id"
-    | "make"
-    | "model"
-    | "year"
-    | "licensePlate"
-    | "color"
-    | "category"
-    | "transmission"
-    | "fuelType"
-    | "seats"
-    | "dailyRate"
-    | "imageUrl"
-    | "imageUrls"
-    | "mileage"
-    | "isAvailable"
-    | "dailyMileageLimit"
-    | "chargePerExtraKm"
-  > | null;
+  car?: BookingCar | null;
   pickupLocation?: Pick<Location, "_id" | "name" | "city"> | null;
   dropoffLocation?: Pick<Location, "_id" | "name" | "city"> | null;
   _creationTime: number;
@@ -253,7 +265,7 @@ export interface Booking {
 export interface BookingDetail {
   booking: Booking;
   user?: User | null;
-  car: Car | null;
+  car: DisplayCar | null;
   pickupLocation: Location | null;
   dropoffLocation: Location | null;
   services: Array<{

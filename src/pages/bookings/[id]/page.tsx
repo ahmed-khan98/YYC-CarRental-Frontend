@@ -327,7 +327,7 @@ function BookingDetailInner({ bookingId }: { bookingId: string }) {
           <Button variant="secondary" onClick={() => navigate("/dashboard")} className="cursor-pointer flex-1 sm:flex-none">
             <ArrowLeft className="h-4 w-4 mr-2" /> Back to Dashboard
           </Button>
-          {car && (
+          {car?._id && (
             <Button variant="secondary" onClick={() => navigate(`/cars/${car._id}`)} className="cursor-pointer">
               <Car className="h-4 w-4 mr-2" /> View Car
             </Button>

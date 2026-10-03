@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import type { Car } from "@/types/index.ts";
+import type { DisplayCar } from "@/types/index.ts";
 import { Badge } from "@/components/ui/badge.tsx";
 import { Card, CardContent, CardHeader } from "@/components/ui/card.tsx";
 import { cn } from "@/lib/utils.ts";
@@ -58,10 +58,12 @@ export function BookingVehicleCard({
   imageUrl,
   extraImageUrls,
 }: {
-  car: Car;
+  car: DisplayCar;
   imageUrl?: string;
   extraImageUrls?: string[];
 }) {
+  const subtitle = [car.category, car.color, car.transmission].filter(Boolean).join(" · ");
+
   return (
     <BookingDetailCard>
       <CardContent className="p-3">
@@ -81,19 +83,27 @@ export function BookingVehicleCard({
             <h1 className="text-base sm:text-lg font-bold leading-tight">
               {formatCarName(car)}
             </h1>
-            <p className="text-sm text-muted-foreground capitalize mt-0.5">
-              {car.category} · {car.color} · {car.transmission}
-            </p>
+            {subtitle && (
+              <p className="text-sm text-muted-foreground capitalize mt-0.5">
+                {subtitle}
+              </p>
+            )}
             <div className="flex flex-wrap gap-1.5 mt-2">
-              <Badge variant="outline" className="text-[10px]">
-                {car.seats} seats
-              </Badge>
-              <Badge variant="outline" className="text-[10px] capitalize">
-                {car.fuelType}
-              </Badge>
-              <Badge className="bg-primary/20 text-primary border-primary/30 text-[10px]">
-                ${car.dailyRate}/day
-              </Badge>
+              {car.seats != null && (
+                <Badge variant="outline" className="text-[10px]">
+                  {car.seats} seats
+                </Badge>
+              )}
+              {car.fuelType && (
+                <Badge variant="outline" className="text-[10px] capitalize">
+                  {car.fuelType}
+                </Badge>
+              )}
+              {car.dailyRate != null && (
+                <Badge className="bg-primary/20 text-primary border-primary/30 text-[10px]">
+                  ${car.dailyRate}/day
+                </Badge>
+              )}
               {car.dailyMileageLimit ? (
                 <Badge variant="outline" className="text-[10px]">
                   {car.dailyMileageLimit} km/day

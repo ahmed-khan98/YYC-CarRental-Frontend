@@ -1,3 +1,5 @@
+import type { CarSnapshot, DisplayCar } from "@/types/index.ts";
+
 const PRIMARY_ADMIN_EMAIL = "ahmedkhn015@gmail.com";
 
 /** Display names as Title Case: "ahmed khan" → "Ahmed Khan". */
@@ -33,11 +35,10 @@ export function normalizePrimaryAdminUser<T extends { email?: string | null; nam
   return { ...user, name: "Admin" };
 }
 
-export function bookingVehicle<T extends { car?: unknown; carSnapshot?: unknown }>(
-  booking?: T | null,
-) {
-  const car = booking?.car ?? booking?.carSnapshot ?? null;
-  return car as T["car"] extends infer C ? C : null;
+export function bookingVehicle(
+  booking?: { car?: DisplayCar | null; carSnapshot?: CarSnapshot | null } | null,
+): DisplayCar | null {
+  return booking?.car ?? booking?.carSnapshot ?? null;
 }
 
 export function formatCarName(
