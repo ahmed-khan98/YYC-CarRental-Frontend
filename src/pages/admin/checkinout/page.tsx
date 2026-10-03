@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button.tsx";
 import { Card, CardContent } from "@/components/ui/card.tsx";
 import { AdminDataTable, type AdminTableColumn } from "@/components/admin-data-table.tsx";
 import { formatDateWithTime } from "@/lib/timeFormat.ts";
-import { formatCarName, formatDisplayName } from "@/lib/displayName.ts";
+import { bookingVehicle, formatCarName, formatDisplayName } from "@/lib/displayName.ts";
 import { carPrimaryImage, resolveMediaUrl } from "@/lib/mediaUrl.ts";
 import { AdminCheckInOutActions } from "@/components/check-in-out.tsx";
 import { InspectionHistoryGrid } from "@/components/inspection-history-grid.tsx";
@@ -40,7 +40,7 @@ function BookingExpandedPanel({
 }: {
   booking: Booking;
 }) {
-  const car = booking.car ?? undefined;
+  const car = bookingVehicle(booking) ?? undefined;
   const customer = booking.user ?? undefined;
   const pickupLocation = booking.pickupLocation ?? undefined;
   const dropoffLocation = booking.dropoffLocation ?? undefined;
@@ -139,7 +139,7 @@ function CheckInOutBookingTable({
       id: "vehicle",
       header: "Vehicle",
       cell: (booking) => {
-        const car = booking.car;
+        const car = bookingVehicle(booking);
         const carImg = carPrimaryImage(car, car ? CAR_IMAGES[car.category] : undefined);
         return (
           <div className="flex items-center gap-3 min-w-[160px]">

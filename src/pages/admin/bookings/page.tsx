@@ -46,7 +46,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { Hint } from "@/components/ui/tooltip.tsx";
-import { formatCarName, formatDisplayName } from "@/lib/displayName.ts";
+import { bookingVehicle, formatCarName, formatDisplayName } from "@/lib/displayName.ts";
 import { useAuth } from "@/hooks/use-auth.ts";
 import { canDeleteRecords } from "@/lib/roles.ts";
 
@@ -344,7 +344,7 @@ export default function AdminBookingsPage() {
               <TableBody>
                 {paginated.map((booking) => {
                   const customer = booking.user;
-                  const car = booking.car;
+                  const car = bookingVehicle(booking);
             return (
                     <TableRow
                       key={booking._id}

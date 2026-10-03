@@ -6,8 +6,14 @@ export const carsApi = {
     category?: string;
     locationId?: string;
     availableOnly?: boolean;
+    includeDeactivated?: boolean;
   }) => {
-    const res = await apiClient.get<Car[]>("/cars", { params });
+    const res = await apiClient.get<Car[]>("/cars", {
+      params: {
+        ...params,
+        includeDeactivated: params?.includeDeactivated ? true : undefined,
+      },
+    });
     return res.data;
   },
   listAvailable: async (params: {

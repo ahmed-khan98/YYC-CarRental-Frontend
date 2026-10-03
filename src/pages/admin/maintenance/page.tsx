@@ -30,8 +30,8 @@ export default function AdminMaintenancePage() {
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const { data: cars } = useQuery({
-    queryKey: ["cars"],
-    queryFn: () => carsApi.list(),
+    queryKey: ["cars", { includeDeactivated: true }],
+    queryFn: () => carsApi.list({ includeDeactivated: true }),
     enabled: open,
   });
   const { data: allMaintenance = [], isLoading: scheduledLoading } = useQuery({

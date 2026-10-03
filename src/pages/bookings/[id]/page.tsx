@@ -28,6 +28,7 @@ import { isExtraDriverService } from "@/lib/extraDriver.ts";
 import { formatTime12h } from "@/lib/timeFormat.ts";
 import { BookingStatusStepper } from "@/components/booking-status-stepper.tsx";
 import { carPrimaryImage } from "@/lib/mediaUrl.ts";
+import { bookingVehicle } from "@/lib/displayName.ts";
 import { InspectionHistoryGrid, pickLatestInspection } from "@/components/inspection-history-grid.tsx";
 import {
   ArrowLeft, MapPin, Calendar, Clock, Car, Package,
@@ -88,7 +89,7 @@ function BookingDetailInner({ bookingId }: { bookingId: string }) {
 
   const {
     booking,
-    car,
+    car: detailCar,
     pickupLocation,
     dropoffLocation,
     services,
@@ -102,6 +103,7 @@ function BookingDetailInner({ bookingId }: { bookingId: string }) {
   } = detail;
   const inspections = detail.inspections ?? booking.inspections ?? [];
   const resolvedBillSummary = billSummary ?? computeBillSummary(billEntries);
+  const car = detailCar ?? bookingVehicle(booking);
 
   const carImg = carPrimaryImage(car, car ? CAR_IMAGES[car.category] : "");
 

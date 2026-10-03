@@ -128,6 +128,7 @@ export interface Car {
   transmission: Transmission;
   fuelType: FuelType;
   isAvailable: boolean;
+  status?: "active" | "deactive";
   locationId?: string;
   mileage?: number | null;
   dailyMileageLimit?: number | null;
@@ -174,6 +175,7 @@ export interface Booking {
   bookedDailyRate?: number;
   bookedDailyMileageLimit?: number;
   bookedChargePerExtraKm?: number;
+  carSnapshot?: Pick<Car, "make" | "model" | "year" | "category" | "licensePlate" | "color"> | null;
   serviceSnapshots?: BookingServiceSnapshot[];
   checkInMileage?: number;
   checkOutMileage?: number;

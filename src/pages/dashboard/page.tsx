@@ -23,6 +23,7 @@ import { InspectionMediaGallery } from "@/components/inspection-media.tsx";
 import { useNavigate } from "react-router-dom";
 import { Hint } from "@/components/ui/tooltip.tsx";
 import { carPrimaryImage, inspectionMediaUrls, resolveMediaUrl } from "@/lib/mediaUrl.ts";
+import { bookingVehicle, formatCarName } from "@/lib/displayName.ts";
 
 const STATUS_COLORS: Record<string, string> = {
   pending: "bg-yellow-500/20 text-yellow-400 border-yellow-500/30",
@@ -134,7 +135,7 @@ function RentalHistoryTable({
       className: "whitespace-normal",
       headClassName: "whitespace-normal",
       cell: (booking) => {
-        const car = booking.car;
+        const car = bookingVehicle(booking);
         const carImg = carPrimaryImage(car, car ? CAR_IMAGES[car.category] : undefined);
         return (
           <div className="flex items-center gap-2">
@@ -146,7 +147,7 @@ function RentalHistoryTable({
               </div>
             )}
             <span className="text-sm font-medium truncate">
-              {car ? `${car.year} ${car.make} ${car.model}` : "—"}
+              {formatCarName(car)}
             </span>
           </div>
         );

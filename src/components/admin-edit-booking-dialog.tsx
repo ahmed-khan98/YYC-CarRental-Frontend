@@ -109,8 +109,8 @@ export function AdminEditBookingDialog({
     enabled: open && !customerProp,
   });
   const { data: cars } = useQuery({
-    queryKey: ["cars"],
-    queryFn: () => carsApi.list(),
+    queryKey: ["cars", { includeDeactivated: true }],
+    queryFn: () => carsApi.list({ includeDeactivated: true }),
     enabled: open,
   });
   const { data: locations } = useQuery({
@@ -254,7 +254,9 @@ export function AdminEditBookingDialog({
                   <Select value={editForm.carId} onValueChange={(v) => setEditForm((f) => f && { ...f, carId: v })}>
                     <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      {(cars ?? []).map((c) => (
+                      {(cars ?? [])
+                        .filter((c) => c.status !== "deactive" || c._id === editForm.carId)
+                        .map((c) => (
                         <SelectItem key={c._id} value={c._id}>{c.year} {c.make} {c.model}</SelectItem>
                       ))}
                     </SelectContent>

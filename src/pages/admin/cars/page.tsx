@@ -26,6 +26,7 @@ import { cn } from "@/lib/utils.ts";
 import { carImageUrls, carPrimaryImage, persistBrowserFile, resolveMediaUrl } from "@/lib/mediaUrl.ts";
 import {
   VEHICLE_TYPE_FILTER_OPTIONS,
+  VEHICLE_TYPE_OPTIONS,
   formatVehicleCategoryLabel,
   type DisplayVehicleCategory,
 } from "@/lib/vehicleCategories.ts";
@@ -67,8 +68,8 @@ export default function AdminCarsPage() {
   const { user } = useAuth();
   const canDelete = canDeleteRecords(user?.role);
   const { data: cars, isLoading: carsLoading } = useQuery({
-    queryKey: ["cars"],
-    queryFn: () => carsApi.list(),
+    queryKey: ["cars", { includeDeactivated: true }],
+    queryFn: () => carsApi.list({ includeDeactivated: true }),
   });
   const createCar = useMutation({
     mutationFn: carsApi.create,
@@ -240,10 +241,10 @@ export default function AdminCarsPage() {
     if (!deleteTarget) return;
     try {
       await removeCar.mutateAsync(deleteTarget._id);
-      toast.success("Car deleted");
+      toast.success("Car deactivated");
       setDeleteTarget(null);
     } catch {
-      toast.error("Failed to delete car");
+      toast.error("Failed to deactivate car");
     }
   };
 
@@ -298,19 +299,24 @@ export default function AdminCarsPage() {
     {
       id: "status",
       header: "Status",
-      cell: (car) => (
-        <Badge
-          variant="outline"
-          className={cn(
-            "text-[11px] font-medium border",
-            car.isAvailable
-              ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-              : "bg-red-50 text-red-700 border-red-200",
-          )}
-        >
-          {car.isAvailable ? "Available" : "Unavailable"}
-        </Badge>
-      ),
+      cell: (car) => {
+        const deactivated = car.status === "deactive";
+        return (
+          <Badge
+            variant="outline"
+            className={cn(
+              "text-[11px] font-medium border",
+              deactivated
+                ? "bg-muted text-muted-foreground border-border"
+                : car.isAvailable
+                  ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                  : "bg-red-50 text-red-700 border-red-200",
+            )}
+          >
+            {deactivated ? "Deactivated" : car.isAvailable ? "Available" : "Unavailable"}
+          </Badge>
+        );
+      },
     },
     {
       id: "available",
@@ -321,6 +327,7 @@ export default function AdminCarsPage() {
         <Switch
           checked={car.isAvailable}
           onCheckedChange={() => handleToggleAvailable(car._id, car.isAvailable)}
+          disabled={car.status === "deactive"}
           className="cursor-pointer"
         />
       ),
@@ -345,7 +352,7 @@ export default function AdminCarsPage() {
               <Pencil className="h-4 w-4" />
             </Button>
           </Hint>
-          {canDelete && (
+          {canDelete && car.status !== "deactive" && (
           <Hint label="Delete car">
             <Button variant="ghost" size="icon" onClick={() => setDeleteTarget(car)} className="cursor-pointer h-8 w-8 text-destructive hover:text-destructive" aria-label="Delete car">
               <Trash2 className="h-4 w-4" />
@@ -452,8 +459,10 @@ export default function AdminCarsPage() {
               <Select value={form.category} onValueChange={(v) => setForm((p) => ({ ...p, category: v as CarCategory }))}>
                 <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {(["economy","compact","sedan","suv","luxury","sports","van"] as const).map((c) => (
-                    <SelectItem key={c} value={c} className="capitalize">{c}</SelectItem>
+                  {VEHICLE_TYPE_OPTIONS.map((c) => (
+                    <SelectItem key={c} value={c}>
+                      {formatVehicleCategoryLabel(c)}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -594,10 +603,10 @@ export default function AdminCarsPage() {
       <ConfirmDeleteDialog
         open={Boolean(deleteTarget)}
         onOpenChange={(next) => !next && setDeleteTarget(null)}
-        title="Delete this car?"
+        title="Deactivate this car?"
         description={
           deleteTarget
-            ? `This will permanently remove "${formatCarName(deleteTarget)}". This action cannot be undone.`
+            ? `"${formatCarName(deleteTarget)}" will be hidden from customers. Existing bookings will keep this car’s details.`
             : ""
         }
         loading={removeCar.isPending}

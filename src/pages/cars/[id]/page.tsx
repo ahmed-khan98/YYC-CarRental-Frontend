@@ -14,13 +14,13 @@ import { vehicleCategoryBadgeClass } from "@/lib/vehicleCategories.ts";
 import { carImageUrls } from "@/lib/mediaUrl.ts";
 
 const CAR_IMAGES: Record<string, string> = {
-  economy: "https://images.unsplash.com/photo-1690278289651-895463644114?w=800&q=80",
+  // economy: "https://images.unsplash.com/photo-1690278289651-895463644114?w=800&q=80",
   sedan: "https://images.unsplash.com/photo-1679891647402-330589ea9309?w=800&q=80",
   suv: "https://images.unsplash.com/photo-1742869246328-847a516cd30a?w=800&q=80",
-  luxury: "https://images.unsplash.com/photo-1650716748498-a2ce13ed0f2d?w=800&q=80",
-  sports: "https://images.unsplash.com/photo-1683916138305-98a86efc9fc9?w=800&q=80",
-  compact: "https://images.unsplash.com/photo-1647708790575-05985b7f670c?w=800&q=80",
-  van: "https://images.unsplash.com/photo-1701918190763-3851cf361f96?w=800&q=80",
+  // luxury: "https://images.unsplash.com/photo-1650716748498-a2ce13ed0f2d?w=800&q=80",
+  // sports: "https://images.unsplash.com/photo-1683916138305-98a86efc9fc9?w=800&q=80",
+  // compact: "https://images.unsplash.com/photo-1647708790575-05985b7f670c?w=800&q=80",
+  // van: "https://images.unsplash.com/photo-1701918190763-3851cf361f96?w=800&q=80",
 };
 
 export default function CarDetailPage() {

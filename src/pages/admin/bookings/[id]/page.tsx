@@ -21,7 +21,7 @@ import {
   AdminCheckInOutActions,
 } from "@/components/check-in-out.tsx";
 import { isExtraDriverService } from "@/lib/extraDriver.ts";
-import { formatDisplayName } from "@/lib/displayName.ts";
+import { bookingVehicle, formatDisplayName } from "@/lib/displayName.ts";
 import { carPrimaryImage } from "@/lib/mediaUrl.ts";
 import { Badge } from "@/components/ui/badge.tsx";
 import { Button } from "@/components/ui/button.tsx";
@@ -103,7 +103,7 @@ export default function AdminBookingDetailPage() {
 
   const {
     booking,
-    car,
+    car: detailCar,
     pickupLocation,
     dropoffLocation,
     services,
@@ -123,6 +123,7 @@ export default function AdminBookingDetailPage() {
   } = detail;
   const inspections = detail.inspections ?? booking.inspections ?? [];
   const resolvedBillSummary = billSummary ?? computeBillSummary(billEntries);
+  const car = detailCar ?? bookingVehicle(booking);
 
   const carImg = carPrimaryImage(car, car ? CAR_IMAGES[car.category] : "");
   const checkIn = pickLatestInspection(inspections, "check_in");

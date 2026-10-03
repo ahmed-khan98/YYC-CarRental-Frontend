@@ -33,6 +33,13 @@ export function normalizePrimaryAdminUser<T extends { email?: string | null; nam
   return { ...user, name: "Admin" };
 }
 
+export function bookingVehicle<T extends { car?: unknown; carSnapshot?: unknown }>(
+  booking?: T | null,
+) {
+  const car = booking?.car ?? booking?.carSnapshot ?? null;
+  return car as T["car"] extends infer C ? C : null;
+}
+
 export function formatCarName(
   car?: { year?: number | string; make?: string; model?: string } | null,
   options?: { includeYear?: boolean },
