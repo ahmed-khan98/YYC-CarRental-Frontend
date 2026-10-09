@@ -14,7 +14,7 @@ import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog.tsx";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select.tsx";
 import { Switch } from "@/components/ui/switch.tsx";
 import { getApiErrorMessage } from "@/api/client.ts";
-import { patchOptionalNumber, patchStringList, patchText } from "@/lib/patchPayload.ts";
+import { patchStringList, patchText } from "@/lib/patchPayload.ts";
 import { toast } from "sonner";
 import { Plus, Pencil, Trash2, Car as CarIcon, Upload, X, ImageIcon, CalendarDays, Loader2 } from "lucide-react";
 import { UploadProgressStatus, overallUploadPercent, uploadProgressLabel } from "@/components/upload-progress.tsx";
@@ -22,7 +22,6 @@ import { Hint } from "@/components/ui/tooltip.tsx";
 import { useAuth } from "@/hooks/use-auth.ts";
 import { canDeleteRecords } from "@/lib/roles.ts";
 import { formatCarName } from "@/lib/displayName.ts";
-import { cn } from "@/lib/utils.ts";
 import { carImageUrls, carPrimaryImage, persistBrowserFile, resolveMediaUrl } from "@/lib/mediaUrl.ts";
 import {
   VEHICLE_TYPE_FILTER_OPTIONS,
@@ -51,6 +50,47 @@ const EMPTY_FORM: CarForm = {
   mileage: "", description: "",
   features: "",
 };
+
+type CarFormErrors = Partial<Record<keyof CarForm, string>>;
+
+const REQUIRED_TEXT_FIELDS: { key: keyof CarForm; label: string }[] = [
+  { key: "make", label: "Make" },
+  { key: "model", label: "Model" },
+  { key: "color", label: "Color" },
+  { key: "licensePlate", label: "License plate" },
+  { key: "vin", label: "VIN" },
+];
+
+const REQUIRED_NUMBER_FIELDS: { key: keyof CarForm; label: string }[] = [
+  { key: "year", label: "Year" },
+  { key: "dailyRate", label: "Daily rate" },
+  { key: "dailyMileageLimit", label: "Daily mileage limit" },
+  { key: "chargePerExtraKm", label: "Charge per extra km" },
+  { key: "seats", label: "Seats" },
+  { key: "mileage", label: "Mileage" },
+];
+
+function validateCarForm(form: CarForm): { errors: CarFormErrors; firstMessage: string | null } {
+  const errors: CarFormErrors = {};
+  for (const { key, label } of REQUIRED_TEXT_FIELDS) {
+    if (!String(form[key] ?? "").trim()) errors[key] = `${label} is required`;
+  }
+  if (!form.category) errors.category = "Category is required";
+  if (!form.transmission) errors.transmission = "Transmission is required";
+  if (!form.fuelType) errors.fuelType = "Fuel type is required";
+  for (const { key, label } of REQUIRED_NUMBER_FIELDS) {
+    const raw = String(form[key] ?? "").trim();
+    if (!raw) errors[key] = `${label} is required`;
+    else if (!Number.isFinite(Number(raw))) errors[key] = `${label} must be a valid number`;
+    else if (Number(raw) < 0) errors[key] = `${label} cannot be negative`;
+  }
+  return { errors, firstMessage: Object.values(errors)[0] ?? null };
+}
+
+function FieldError({ message }: { message?: string }) {
+  if (!message) return null;
+  return <p className="text-[11px] text-destructive">{message}</p>;
+}
 
 const CAR_IMAGES: Record<string, string> = {
   economy: "https://images.unsplash.com/photo-1690278289651-895463644114?w=200&q=70",
@@ -88,6 +128,7 @@ export default function AdminCarsPage() {
   const [deleteTarget, setDeleteTarget] = useState<Car | null>(null);
   const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState<CarForm>(EMPTY_FORM);
+  const [fieldErrors, setFieldErrors] = useState<CarFormErrors>({});
   const [loading, setLoading] = useState(false);
   const [savingLabel, setSavingLabel] = useState("Saving...");
   const [uploadPercent, setUploadPercent] = useState<number | null>(null);
@@ -125,6 +166,7 @@ export default function AdminCarsPage() {
 
   const openCreate = () => {
     setForm(EMPTY_FORM);
+    setFieldErrors({});
     setEditId(null);
     resetImageState();
     setOpen(true);
@@ -138,10 +180,11 @@ export default function AdminCarsPage() {
       dailyMileageLimit: car.dailyMileageLimit != null ? String(car.dailyMileageLimit) : "",
       chargePerExtraKm: car.chargePerExtraKm != null ? String(car.chargePerExtraKm) : "",
       seats: String(car.seats), transmission: car.transmission, fuelType: car.fuelType,
-      mileage: car.mileage ? String(car.mileage) : "",
+      mileage: car.mileage != null ? String(car.mileage) : "",
       description: car.description ?? "",
       features: car.features?.join(", ") ?? "",
     });
+    setFieldErrors({});
     resetImageState();
     const stored = car.imageUrls?.length ? car.imageUrls : car.imageUrl ? [car.imageUrl] : [];
     const previews = carImageUrls(car);
@@ -167,8 +210,10 @@ export default function AdminCarsPage() {
   };
 
   const handleSave = async () => {
-    if (!form.make || !form.model || !form.year || !form.dailyRate || !form.vin.trim()) {
-      toast.error("Please fill in all required fields");
+    const { errors, firstMessage } = validateCarForm(form);
+    if (firstMessage) {
+      setFieldErrors(errors);
+      toast.error(firstMessage);
       return;
     }
     setLoading(true);
@@ -211,10 +256,10 @@ export default function AdminCarsPage() {
         category: form.category, color: form.color, licensePlate: form.licensePlate,
         vin: form.vin.trim(),
         dailyRate: Number(form.dailyRate), seats: Number(form.seats),
-        dailyMileageLimit: patchOptionalNumber(form.dailyMileageLimit),
-        chargePerExtraKm: patchOptionalNumber(form.chargePerExtraKm),
+        dailyMileageLimit: Number(form.dailyMileageLimit),
+        chargePerExtraKm: Number(form.chargePerExtraKm),
         transmission: form.transmission, fuelType: form.fuelType,
-        mileage: patchOptionalNumber(form.mileage),
+        mileage: Number(form.mileage),
         description: patchText(form.description),
         features: patchStringList(form.features),
         imageUrls: imageUrls.map((url) => resolveMediaUrl(url)).filter(Boolean),
@@ -253,8 +298,13 @@ export default function AdminCarsPage() {
     toast.success(`Car ${!current ? "enabled" : "disabled"}`);
   };
 
-  const f = (k: keyof CarForm) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
+  const clearFieldError = (k: keyof CarForm) =>
+    setFieldErrors((p) => (p[k] ? { ...p, [k]: undefined } : p));
+
+  const f = (k: keyof CarForm) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     setForm((p) => ({ ...p, [k]: e.target.value }));
+    clearFieldError(k);
+  };
 
   const carColumns: AdminTableColumn<Car>[] = [
     {
@@ -297,26 +347,15 @@ export default function AdminCarsPage() {
       cell: (car) => <span className="font-semibold text-primary">${car.dailyRate}/day</span>,
     },
     {
-      id: "status",
-      header: "Status",
-      cell: (car) => {
-        const deactivated = car.status === "deactive";
-        return (
-          <Badge
-            variant="outline"
-            className={cn(
-              "text-[11px] font-medium border",
-              deactivated
-                ? "bg-muted text-muted-foreground border-border"
-                : car.isAvailable
-                  ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                  : "bg-red-50 text-red-700 border-red-200",
-            )}
-          >
-            {deactivated ? "Deactivated" : car.isAvailable ? "Available" : "Unavailable"}
-          </Badge>
-        );
-      },
+      id: "dailyKm",
+      header: "Daily KM",
+      className: "hidden sm:table-cell",
+      headClassName: "hidden sm:table-cell",
+      cell: (car) => (
+        <span className="text-sm">
+          {car.dailyMileageLimit ? `${car.dailyMileageLimit} km` : "Unlimited"}
+        </span>
+      ),
     },
     {
       id: "available",
@@ -428,11 +467,19 @@ export default function AdminCarsPage() {
             {([["make", "Make *"], ["model", "Model *"], ["year", "Year *"], ["dailyRate", "Daily Rate ($) *"]] as const).map(([key, label]) => (
               <div key={key} className="min-w-0 space-y-1">
                 <Label className="text-xs">{label}</Label>
-                <Input value={form[key]} onChange={f(key)} placeholder={label.replace(" *", "")} className="w-full" />
+                <Input
+                  value={form[key]}
+                  onChange={f(key)}
+                  placeholder={label.replace(" *", "")}
+                  className="w-full"
+                  required
+                  aria-invalid={Boolean(fieldErrors[key])}
+                />
+                <FieldError message={fieldErrors[key]} />
               </div>
             ))}
             <div className="min-w-0 space-y-1">
-              <Label className="text-xs">Daily Mileage Limit (km/day)</Label>
+              <Label className="text-xs">Daily Mileage Limit (km/day) *</Label>
               <Input
                 type="number"
                 min={0}
@@ -440,10 +487,13 @@ export default function AdminCarsPage() {
                 onChange={f("dailyMileageLimit")}
                 placeholder="e.g. 100"
                 className="w-full"
+                required
+                aria-invalid={Boolean(fieldErrors.dailyMileageLimit)}
               />
+              <FieldError message={fieldErrors.dailyMileageLimit} />
             </div>
             <div className="min-w-0 space-y-1">
-              <Label className="text-xs">Charge per Extra Km ($)</Label>
+              <Label className="text-xs">Charge per Extra Km ($) *</Label>
               <Input
                 type="number"
                 min={0}
@@ -452,12 +502,23 @@ export default function AdminCarsPage() {
                 onChange={f("chargePerExtraKm")}
                 placeholder="e.g. 0.50"
                 className="w-full"
+                required
+                aria-invalid={Boolean(fieldErrors.chargePerExtraKm)}
               />
+              <FieldError message={fieldErrors.chargePerExtraKm} />
             </div>
             <div className="min-w-0 space-y-1">
-              <Label className="text-xs">Category</Label>
-              <Select value={form.category} onValueChange={(v) => setForm((p) => ({ ...p, category: v as CarCategory }))}>
-                <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+              <Label className="text-xs">Category *</Label>
+              <Select
+                value={form.category}
+                onValueChange={(v) => {
+                  setForm((p) => ({ ...p, category: v as CarCategory }));
+                  clearFieldError("category");
+                }}
+              >
+                <SelectTrigger className="w-full" aria-invalid={Boolean(fieldErrors.category)}>
+                  <SelectValue />
+                </SelectTrigger>
                 <SelectContent>
                   {VEHICLE_TYPE_OPTIONS.map((c) => (
                     <SelectItem key={c} value={c}>
@@ -466,29 +527,48 @@ export default function AdminCarsPage() {
                   ))}
                 </SelectContent>
               </Select>
+              <FieldError message={fieldErrors.category} />
             </div>
             <div className="min-w-0 space-y-1">
-              <Label className="text-xs">Transmission</Label>
-              <Select value={form.transmission} onValueChange={(v) => setForm((p) => ({ ...p, transmission: v as Transmission }))}>
-                <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+              <Label className="text-xs">Transmission *</Label>
+              <Select
+                value={form.transmission}
+                onValueChange={(v) => {
+                  setForm((p) => ({ ...p, transmission: v as Transmission }));
+                  clearFieldError("transmission");
+                }}
+              >
+                <SelectTrigger className="w-full" aria-invalid={Boolean(fieldErrors.transmission)}>
+                  <SelectValue />
+                </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="automatic">Automatic</SelectItem>
                   <SelectItem value="manual">Manual</SelectItem>
                 </SelectContent>
               </Select>
+              <FieldError message={fieldErrors.transmission} />
             </div>
             <div className="min-w-0 space-y-1">
-              <Label className="text-xs">Fuel Type</Label>
-              <Select value={form.fuelType} onValueChange={(v) => setForm((p) => ({ ...p, fuelType: v as FuelType }))}>
-                <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+              <Label className="text-xs">Fuel Type *</Label>
+              <Select
+                value={form.fuelType}
+                onValueChange={(v) => {
+                  setForm((p) => ({ ...p, fuelType: v as FuelType }));
+                  clearFieldError("fuelType");
+                }}
+              >
+                <SelectTrigger className="w-full" aria-invalid={Boolean(fieldErrors.fuelType)}>
+                  <SelectValue />
+                </SelectTrigger>
                 <SelectContent>
                   {(["gasoline","diesel","electric","hybrid"] as const).map((ft) => (
                     <SelectItem key={ft} value={ft} className="capitalize">{ft}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+              <FieldError message={fieldErrors.fuelType} />
             </div>
-            {([["color", "Color"], ["licensePlate", "License Plate"], ["vin", "VIN *"], ["seats", "Seats"], ["mileage", "Mileage (km)"]] as const).map(([key, label]) => (
+            {([["color", "Color *"], ["licensePlate", "License Plate *"], ["vin", "VIN *"], ["seats", "Seats *"], ["mileage", "Mileage (km) *"]] as const).map(([key, label]) => (
               <div key={key} className="min-w-0 space-y-1">
                 <Label className="text-xs">{label}</Label>
                 <Input
@@ -496,8 +576,12 @@ export default function AdminCarsPage() {
                   onChange={f(key)}
                   placeholder={label.replace(" *", "")}
                   className="w-full"
-                  required={key === "vin"}
+                  required
+                  min={key === "mileage" || key === "seats" ? 0 : undefined}
+                  type={key === "mileage" || key === "seats" ? "number" : "text"}
+                  aria-invalid={Boolean(fieldErrors[key])}
                 />
+                <FieldError message={fieldErrors[key]} />
               </div>
             ))}
 
