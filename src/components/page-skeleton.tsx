@@ -229,7 +229,7 @@ export function BookingsTableSkeleton({ rows = 8 }: { rows?: number }) {
 export function AdminShellSkeleton() {
   return (
     <div className="min-h-screen flex">
-      <aside className="hidden md:flex w-56 shrink-0 flex-col border-r border-border/50 bg-card/40 p-4 space-y-4">
+      <aside className="hidden md:flex w-48 shrink-0 flex-col border-r border-border/50 bg-card/40 p-3 space-y-4">
         <Skeleton className="h-8 w-28" />
         <div className="space-y-2 pt-2">
           {Array.from({ length: 7 }).map((_, i) => (

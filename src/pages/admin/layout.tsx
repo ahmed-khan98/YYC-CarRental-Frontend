@@ -95,8 +95,8 @@ function AdminContent() {
 
   return (
     <div className="flex min-h-screen w-full">
-      <aside className="hidden md:sticky md:top-0 md:h-screen md:flex w-56 flex-col border-r border-border/50 bg-sidebar shrink-0">
-        <div className="space-y-3 border-b border-border/50 p-4">
+      <aside className="hidden md:sticky md:top-0 md:h-screen md:flex w-48 flex-col border-r border-border/50 bg-sidebar shrink-0">
+        <div className="space-y-3 border-b border-border/50 px-3 py-3">
           <Link to="/" className="inline-flex cursor-pointer">
             <BrandLogo variant="sidebar" />
           </Link>
@@ -117,7 +117,7 @@ function AdminContent() {
                 key={item.href}
                 to={item.href}
                 className={cn(
-                  "flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors cursor-pointer",
+                  "flex items-center gap-2 px-2.5 py-2 rounded-lg text-sm transition-colors cursor-pointer",
                   isActive
                     ? "bg-primary/10 text-primary font-medium"
                     : "text-muted-foreground hover:text-foreground hover:bg-secondary",
@@ -130,7 +130,7 @@ function AdminContent() {
             );
           })}
         </nav>
-        <div className="border-t border-border/50 p-3">
+        <div className="border-t border-border/50 px-2.5 py-3">
           <div className="mb-2 truncate px-1 text-xs text-muted-foreground">
             {formatActorDisplayName(staffUser.name, staffUser.role, "")}
           </div>

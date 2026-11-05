@@ -1,4 +1,5 @@
 import { openPdfAfterFetch, openPdfBlob } from "@/lib/openPdf.ts";
+import { pageQuery, resolveListResult, type ListPageParams, type Paginated } from "@/lib/pagination.ts";
 import { API_BASE, apiClient, getStoredToken } from "./client.ts";
 import type { FileUploadProgress } from "./upload.api.ts";
 import type { AdminOverview, Booking, BookingDetail, BookingStatus, BillEntry, BillEntryResponse, BillEntryType, BillEntryStatus, BillPaidVia, BillSummary, Car } from "@/types/index.ts";
@@ -101,9 +102,18 @@ export const bookingsApi = {
     const res = await apiClient.get<Booking[]>("/bookings/my");
     return res.data;
   },
-  adminList: async (status?: string) => {
-    const res = await apiClient.get<Booking[]>("/bookings/admin", { params: { status } });
-    return res.data;
+  adminList: async (
+    params?: { status?: string; pickupFrom?: string; pickupTo?: string } & ListPageParams,
+  ): Promise<Booking[] | Paginated<Booking>> => {
+    const res = await apiClient.get<Booking[] | Paginated<Booking>>("/bookings/admin", {
+      params: {
+        status: params?.status,
+        pickupFrom: params?.pickupFrom,
+        pickupTo: params?.pickupTo,
+        ...pageQuery(params),
+      },
+    });
+    return resolveListResult<Booking>(res.data, params);
   },
   adminOverview: async () => {
     const res = await apiClient.get<AdminOverview>("/bookings/admin/overview");

@@ -18,25 +18,30 @@ function formatDropoffDateTime(booking: Booking) {
 type ScheduleCellProps = {
   booking: Booking;
   locationName?: string | null;
+  compact?: boolean;
 };
 
-export function BookingPickupCell({ booking, locationName }: ScheduleCellProps) {
+export function BookingPickupCell({ booking, locationName, compact }: ScheduleCellProps) {
   return (
     <div className="leading-snug whitespace-normal">
-      <div className="text-xs sm:text-sm">{formatPickupDateTime(booking)}</div>
+      <div className={compact ? "text-xs" : "text-xs sm:text-sm"}>{formatPickupDateTime(booking)}</div>
       {locationName && (
-        <div className="text-xs text-muted-foreground mt-0.5">{locationName}</div>
+        <div className={compact ? "text-[10px] text-muted-foreground mt-0.5" : "text-xs text-muted-foreground mt-0.5"}>
+          {locationName}
+        </div>
       )}
     </div>
   );
 }
 
-export function BookingDropoffCell({ booking, locationName }: ScheduleCellProps) {
+export function BookingDropoffCell({ booking, locationName, compact }: ScheduleCellProps) {
   return (
     <div className="leading-snug whitespace-normal">
-      <div className="text-xs sm:text-sm">{formatDropoffDateTime(booking)}</div>
+      <div className={compact ? "text-xs" : "text-xs sm:text-sm"}>{formatDropoffDateTime(booking)}</div>
       {locationName && (
-        <div className="text-xs text-muted-foreground mt-0.5">{locationName}</div>
+        <div className={compact ? "text-[10px] text-muted-foreground mt-0.5" : "text-xs text-muted-foreground mt-0.5"}>
+          {locationName}
+        </div>
       )}
     </div>
   );
