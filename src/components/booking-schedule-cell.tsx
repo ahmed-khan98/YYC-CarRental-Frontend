@@ -24,7 +24,7 @@ type ScheduleCellProps = {
 export function BookingPickupCell({ booking, locationName, compact }: ScheduleCellProps) {
   return (
     <div className="leading-snug whitespace-normal">
-      <div className={compact ? "text-xs" : "text-xs sm:text-sm"}>{formatPickupDateTime(booking)}</div>
+      <div className={compact ? "text-[13px]" : "text-xs sm:text-sm"}>{formatPickupDateTime(booking)}</div>
       {locationName && (
         <div className={compact ? "text-[10px] text-muted-foreground mt-0.5" : "text-xs text-muted-foreground mt-0.5"}>
           {locationName}
@@ -37,7 +37,7 @@ export function BookingPickupCell({ booking, locationName, compact }: ScheduleCe
 export function BookingDropoffCell({ booking, locationName, compact }: ScheduleCellProps) {
   return (
     <div className="leading-snug whitespace-normal">
-      <div className={compact ? "text-xs" : "text-xs sm:text-sm"}>{formatDropoffDateTime(booking)}</div>
+      <div className={compact ? "text-[13px]" : "text-xs sm:text-sm"}>{formatDropoffDateTime(booking)}</div>
       {locationName && (
         <div className={compact ? "text-[10px] text-muted-foreground mt-0.5" : "text-xs text-muted-foreground mt-0.5"}>
           {locationName}

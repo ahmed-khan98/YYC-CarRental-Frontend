@@ -178,7 +178,7 @@ const AdminBookingRow = memo(function AdminBookingRow({
           {booking.paymentStatus ?? "pending"}
         </Badge>
       </TableCell>
-      <TableCell className="font-semibold text-primary text-xs">${booking.totalAmount}</TableCell>
+      <TableCell className="font-semibold text-primary text-[13px]">${booking.totalAmount}</TableCell>
       <TableCell className="w-px px-1 text-center" onClick={(e) => e.stopPropagation()}>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -559,7 +559,7 @@ export default function AdminBookingsPage() {
                 <Loader2 className="h-6 w-6 animate-spin text-primary" />
               </div>
             )}
-            <Table className="text-xs [&_th]:h-8 [&_th]:px-1.5 [&_th]:text-xs [&_td]:px-1.5 [&_td]:py-1">
+            <Table className="text-[13px] [&_th]:h-8 [&_th]:px-1.5 [&_th]:text-[13px] [&_td]:px-1.5 [&_td]:py-1">
               <TableHeader>
                 <TableRow className="bg-muted/30 hover:bg-muted/30">
                   <TableHead className="min-w-[100px]">Booking ID</TableHead>
