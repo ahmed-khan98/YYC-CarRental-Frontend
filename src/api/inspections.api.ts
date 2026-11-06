@@ -1,4 +1,6 @@
-import { openPdfAfterFetch } from "@/lib/openPdf.ts";
+import { openPdfBlob } from "@/lib/openPdf.ts";
+import { resolveMediaUrl } from "@/lib/mediaUrl.ts";
+import { pageQuery, resolveListResult, type ListPageParams, type Paginated } from "@/lib/pagination.ts";
 import { API_BASE, apiClient, getStoredToken } from "./client.ts";
 import type { Booking, ExtraDriverCheckInDetail, FuelLevel, InspectionType, MainDriverCheckInDetail, VehicleInspection } from "@/types/index.ts";
 import type { ExtraMileageBilling } from "@/lib/extraMileage.ts";
@@ -6,6 +8,21 @@ import type { ExtraMileageBilling } from "@/lib/extraMileage.ts";
 export type InspectionCreateResult = VehicleInspection & {
   mileageBilling?: ExtraMileageBilling & { newTotalAmount?: number };
 };
+
+export type CheckInOutBoardStatus = "confirmed" | "checked_in" | "completed";
+
+async function fetchPdfBlob(url: string, headers?: HeadersInit): Promise<Blob | null> {
+  if (!url) return null;
+  try {
+    const response = await fetch(url, { headers });
+    if (!response.ok) return null;
+    const blob = await response.blob();
+    const header = await blob.slice(0, 5).text();
+    return header.startsWith("%PDF") ? blob : null;
+  } catch {
+    return null;
+  }
+}
 
 export const inspectionsApi = {
   create: async (data: {
@@ -80,24 +97,36 @@ export const inspectionsApi = {
   getSignedPdfUrl: (inspectionId: string) => {
     return `${API_BASE}/inspections/signed-pdf/${inspectionId}`;
   },
-  openSignedPdf: async (inspectionId: string) => {
-    await openPdfAfterFetch(async () => {
-      const token = getStoredToken();
-      const response = await fetch(inspectionsApi.getSignedPdfUrl(inspectionId), {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
-      if (!response.ok) {
-        let message = "Failed to load signed PDF";
-        try {
-          const data = (await response.json()) as { message?: string };
-          if (data?.message) message = data.message;
-        } catch {
-          // keep default message when the body is not JSON
-        }
-        throw new Error(message);
+  openSignedPdf: async (inspectionId: string, signedPdfUrl?: string | null) => {
+    const filename = `agreement-${inspectionId}.pdf`;
+    if (signedPdfUrl) {
+      const stored = await fetchPdfBlob(resolveMediaUrl(signedPdfUrl));
+      if (stored) {
+        openPdfBlob(stored, filename);
+        return;
       }
-      return response.blob();
-    }, `agreement-${inspectionId}.pdf`);
+    }
+
+    const token = getStoredToken();
+    const response = await fetch(inspectionsApi.getSignedPdfUrl(inspectionId), {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!response.ok) {
+      let message = "Failed to load signed PDF";
+      try {
+        const data = (await response.json()) as { message?: string };
+        if (data?.message) message = data.message;
+      } catch {
+        // keep default message when the body is not JSON
+      }
+      throw new Error(message);
+    }
+    const blob = await response.blob();
+    const header = await blob.slice(0, 5).text();
+    if (!header.startsWith("%PDF")) {
+      throw new Error("Failed to load signed PDF");
+    }
+    openPdfBlob(blob, filename);
   },
   listByBooking: async (bookingId: string) => {
     const res = await apiClient.get<VehicleInspection[]>(`/inspections/booking/${bookingId}`);
@@ -107,13 +136,25 @@ export const inspectionsApi = {
     const res = await apiClient.get<VehicleInspection[]>(`/inspections/car/${carId}`);
     return res.data;
   },
-  adminList: async () => {
-    const res = await apiClient.get<VehicleInspection[]>("/inspections/admin");
-    return res.data;
+  adminList: async (
+    params?: ListPageParams,
+  ): Promise<VehicleInspection[] | Paginated<VehicleInspection>> => {
+    const res = await apiClient.get<VehicleInspection[] | Paginated<VehicleInspection>>(
+      "/inspections/admin",
+      { params: pageQuery(params) },
+    );
+    return resolveListResult<VehicleInspection>(res.data, params);
   },
-  checkInOutBoard: async () => {
-    const res = await apiClient.get<Booking[]>("/inspections/check-in-out");
-    return res.data;
+  checkInOutBoard: async (
+    params?: ListPageParams & { status?: CheckInOutBoardStatus },
+  ): Promise<Booking[] | Paginated<Booking>> => {
+    const res = await apiClient.get<Booking[] | Paginated<Booking>>("/inspections/check-in-out", {
+      params: {
+        ...pageQuery(params),
+        ...(params?.status ? { status: params.status } : {}),
+      },
+    });
+    return resolveListResult<Booking>(res.data, params);
   },
   getById: async (inspectionId: string) => {
     const res = await apiClient.get<VehicleInspection>(`/inspections/${inspectionId}`);

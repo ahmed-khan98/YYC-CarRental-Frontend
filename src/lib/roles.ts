@@ -21,6 +21,12 @@ export function roleLabel(role?: UserRole) {
   return "Customer";
 }
 
+export function roleBadgeClass(role?: string) {
+  if (role === "admin") return "bg-primary/20 text-primary border-primary/30 text-xs";
+  if (role === "sub_admin") return "bg-blue-500/20 text-blue-400 border-blue-500/30 text-xs";
+  return "bg-secondary text-secondary-foreground text-xs";
+}
+
 export function getPostLoginPath(role?: string, redirect?: string | null) {
   return resolvePostLoginPath(role, redirect);
 }

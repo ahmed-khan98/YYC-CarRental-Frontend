@@ -10,6 +10,7 @@ import { getApiErrorMessage } from "@/api/client.ts";
 import { getPostLoginPath } from "@/lib/roles.ts";
 import { getRedirectFromSearch } from "@/lib/authRedirect.ts";
 import { cn } from "@/lib/utils.ts";
+import { EMAIL_ERROR, isValidEmail } from "@/lib/email.ts";
 import { ArrowLeft, Eye, EyeOff, Loader2, Lock, Mail, User } from "lucide-react";
 
 export default function LoginPage() {
@@ -23,6 +24,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [emailError, setEmailError] = useState<string | null>(null);
 
   useEffect(() => {
     document.documentElement.classList.add("overflow-hidden");
@@ -48,6 +50,11 @@ export default function LoginPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (email.trim() && !isValidEmail(email)) {
+      setEmailError(EMAIL_ERROR);
+      return;
+    }
+    setEmailError(null);
     setLoading(true);
     try {
       const authedUser =
@@ -145,13 +152,18 @@ export default function LoginPage() {
                   id="email"
                   type="email"
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  onChange={(e) => {
+                    setEmail(e.target.value);
+                    if (emailError) setEmailError(null);
+                  }}
                   placeholder="you@example.com"
                   className="h-11 pl-10"
                   autoComplete="email"
                   required
+                  aria-invalid={Boolean(emailError)}
                 />
               </div>
+              {emailError ? <p className="text-[11px] text-destructive">{emailError}</p> : null}
             </div>
 
             <div className="space-y-2">
@@ -183,9 +195,11 @@ export default function LoginPage() {
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </Button>
               </div>
-              <p className="text-xs text-muted-foreground">
-                {showPassword ? "Password is visible" : "Use at least 6 characters"}
-              </p>
+              {mode === "register" && (
+                <p className="text-xs text-muted-foreground">
+                  {showPassword ? "Password is visible" : "Use at least 6 characters"}
+                </p>
+              )}
             </div>
 
             <Button

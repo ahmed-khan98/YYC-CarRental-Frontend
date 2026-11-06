@@ -1,7 +1,9 @@
+import { format } from "date-fns";
+import { DEFAULT_PRE_AUTHORIZED_AMOUNT } from "@/config/appConfig.ts";
 import type { BillEntry, BillPaidVia, SecurityDepositStatus, SecurityDepositSummary } from "@/types/index.ts";
 import { getBillEntryTotals } from "@/lib/billing.ts";
 
-export const SECURITY_DEPOSIT_AMOUNT = 800;
+export const SECURITY_DEPOSIT_AMOUNT = DEFAULT_PRE_AUTHORIZED_AMOUNT;
 export const SECURITY_DEPOSIT_HOLD_DAYS = 15;
 
 export const SECURITY_DEPOSIT_STATUS_LABELS: Record<SecurityDepositStatus, string> = {
@@ -9,6 +11,19 @@ export const SECURITY_DEPOSIT_STATUS_LABELS: Record<SecurityDepositStatus, strin
   partially_used: "Partially Used",
   refunded: "Refunded",
 };
+
+export const SECURITY_DEPOSIT_STATUS_STYLES: Record<SecurityDepositStatus, string> = {
+  held: "bg-blue-500/20 text-blue-400 border-blue-500/30",
+  partially_used: "bg-amber-500/20 text-amber-400 border-amber-500/30",
+  refunded: "bg-green-500/20 text-green-400 border-green-500/30",
+};
+
+export function formatDepositDate(value?: string | null) {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return format(date, "MMM d, yyyy");
+}
 
 export const BILL_PAID_VIA_LABELS: Record<BillPaidVia, string> = {
   e_transfer: "E-Transfer",

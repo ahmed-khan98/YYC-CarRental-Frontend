@@ -19,6 +19,38 @@ type BookingLocationsSectionProps = {
   onDropoffLocationChange: (id: string) => void;
 };
 
+function LocationSelectField({
+  label,
+  placeholder,
+  value,
+  onChange,
+  locations,
+}: {
+  label: string;
+  placeholder: string;
+  value: string;
+  onChange: (id: string) => void;
+  locations: Location[];
+}) {
+  return (
+    <div className="space-y-2">
+      <Label className="text-xs text-muted-foreground">{label}</Label>
+      <Select value={value} onValueChange={onChange}>
+        <SelectTrigger>
+          <SelectValue placeholder={placeholder} />
+        </SelectTrigger>
+        <SelectContent>
+          {locations.map((loc) => (
+            <SelectItem key={loc._id} value={loc._id}>
+              {loc.name}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
+
 export const BookingLocationsSection = memo(function BookingLocationsSection({
   locations,
   pickupLocationId,
@@ -40,36 +72,20 @@ export const BookingLocationsSection = memo(function BookingLocationsSection({
         <SectionTitle icon={<MapPin className="h-4 w-4" />} title="Pickup & Drop-off Locations" />
       </BookingDetailCardHeader>
       <BookingDetailCardContent className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label className="text-xs text-muted-foreground">Pickup Location</Label>
-          <Select value={pickupLocationId} onValueChange={onPickupLocationChange}>
-            <SelectTrigger>
-              <SelectValue placeholder="Select pickup location" />
-            </SelectTrigger>
-            <SelectContent>
-              {locations.map((loc) => (
-                <SelectItem key={loc._id} value={loc._id}>
-                  {loc.name} — {loc.city}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="space-y-2">
-          <Label className="text-xs text-muted-foreground">Drop-off Location</Label>
-          <Select value={dropoffLocationId} onValueChange={onDropoffLocationChange}>
-            <SelectTrigger>
-              <SelectValue placeholder="Select drop-off location" />
-            </SelectTrigger>
-            <SelectContent>
-              {locations.map((loc) => (
-                <SelectItem key={loc._id} value={loc._id}>
-                  {loc.name} — {loc.city}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+        <LocationSelectField
+          label="Pickup Location"
+          placeholder="Select pickup location"
+          value={pickupLocationId}
+          onChange={onPickupLocationChange}
+          locations={locations}
+        />
+        <LocationSelectField
+          label="Drop-off Location"
+          placeholder="Select drop-off location"
+          value={dropoffLocationId}
+          onChange={onDropoffLocationChange}
+          locations={locations}
+        />
       </BookingDetailCardContent>
     </BookingDetailCard>
   );

@@ -1,9 +1,10 @@
-import type { ReactNode } from "react";
+import { memo, type ReactNode } from "react";
 import type { DisplayCar } from "@/types/index.ts";
 import { Badge } from "@/components/ui/badge.tsx";
 import { Card, CardContent, CardHeader } from "@/components/ui/card.tsx";
 import { cn } from "@/lib/utils.ts";
 import { formatCarName } from "@/lib/displayName.ts";
+import { formatAllowedMileageLabel } from "@/lib/extraMileage.ts";
 import { resolveMediaUrl } from "@/lib/mediaUrl.ts";
 import { Car as CarIcon } from "lucide-react";
 
@@ -53,7 +54,18 @@ export function InfoRow({ label, value }: { label: string; value: ReactNode }) {
   );
 }
 
-export function BookingVehicleCard({
+export function AllowedKmInfoRow({
+  dailyMileageLimit,
+  rentalDays,
+}: {
+  dailyMileageLimit?: number | null;
+  rentalDays: number;
+}) {
+  const breakdown = formatAllowedMileageLabel(dailyMileageLimit, rentalDays);
+  return <InfoRow label="Allowed KM" value={breakdown ?? "Unlimited"} />;
+}
+
+export const BookingVehicleCard = memo(function BookingVehicleCard({
   car,
   imageUrl,
   extraImageUrls,
@@ -133,4 +145,4 @@ export function BookingVehicleCard({
       </CardContent>
     </BookingDetailCard>
   );
-}
+});

@@ -25,6 +25,8 @@ import AdminLocationsPage from "./pages/admin/locations/page.tsx";
 import AdminServicesPage from "./pages/admin/services/page.tsx";
 import AdminMaintenancePage from "./pages/admin/maintenance/page.tsx";
 import AdminTeamPage from "./pages/admin/team/page.tsx";
+import AdminSettingsPage from "./pages/admin/settings/page.tsx";
+import AdminProfilePage from "./pages/admin/profile/page.tsx";
 import AdminBookingDetailPage from "./pages/admin/bookings/[id]/page.tsx";
 import BookingDetailPage from "./pages/bookings/[id]/page.tsx";
 
@@ -61,6 +63,9 @@ export default function App() {
             <Route path="services" element={<AdminServicesPage />} />
             <Route path="maintenance" element={<AdminMaintenancePage />} />
             <Route path="team" element={<AdminTeamPage />} />
+            <Route path="settings" element={<Navigate to="/admin/config" replace />} />
+            <Route path="config" element={<AdminSettingsPage />} />
+            <Route path="profile" element={<AdminProfilePage />} />
           </Route>
 
           <Route path="/auth/login" element={<LoginPage />} />

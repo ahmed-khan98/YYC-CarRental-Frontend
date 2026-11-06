@@ -114,6 +114,7 @@ export const BookingServicesSection = memo(function BookingServicesSection({
                 <Checkbox
                   checked={isSelected}
                   onCheckedChange={() => onToggleService(service._id)}
+                  onClick={(event) => event.stopPropagation()}
                   className="mt-0.5"
                 />
                 <div className="flex-1 min-w-0">
@@ -155,7 +156,6 @@ export const BookingServicesSection = memo(function BookingServicesSection({
                         id={`extra-driver-name-${index}`}
                         value={name}
                         onChange={(event) => onExtraDriverNameChange(index, event.target.value)}
-                        placeholder="Enter full name"
                         className="h-9"
                       />
                     </div>

@@ -24,6 +24,7 @@ import { useNavigate } from "react-router-dom";
 import { Hint } from "@/components/ui/tooltip.tsx";
 import { carPrimaryImage, inspectionMediaUrls, resolveMediaUrl } from "@/lib/mediaUrl.ts";
 import { bookingVehicle, formatCarName } from "@/lib/displayName.ts";
+import { formatMoney } from "@/lib/rentalPricing.ts";
 
 const STATUS_COLORS: Record<string, string> = {
   pending: "bg-yellow-500/20 text-yellow-400 border-yellow-500/30",
@@ -182,7 +183,7 @@ function RentalHistoryTable({
       header: "Total",
       className: "whitespace-normal",
       headClassName: "whitespace-normal",
-      cell: (booking) => <span className="font-semibold text-primary text-sm">${booking.totalAmount}</span>,
+      cell: (booking) => <span className="font-semibold text-primary text-sm">{formatMoney(booking.totalAmount)}</span>,
     },
     {
       id: "status",
@@ -340,7 +341,7 @@ function DashboardInner() {
           { icon: CarIcon, label: "Total Bookings", value: stats.total },
           { icon: CheckCircle, label: "Active", value: stats.active },
           { icon: Clock, label: "Completed", value: stats.completed },
-          { icon: DollarSign, label: "Total Spent", value: `$${stats.spent}` },
+          { icon: DollarSign, label: "Total Spent", value: formatMoney(stats.spent) },
         ].map((stat, i) => (
           <motion.div
             key={stat.label}

@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useMemo } from "react";
-import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { inspectionsApi } from "@/api/inspections.api.ts";
 import { bookingsApi } from "@/api/bookings.api.ts";
 import { uploadFile, uploadFiles } from "@/api/upload.api.ts";
@@ -10,8 +10,11 @@ import { getApiErrorMessage } from "@/api/client.ts";
 import { resolveMediaUrl } from "@/lib/mediaUrl.ts";
 import type { Booking, ExtraDriverCheckInDetail, FuelLevel, MainDriverCheckInDetail } from "@/types/index.ts";
 import { calculateExtraMileageBilling } from "@/lib/extraMileage.ts";
-import { calculateRentalDays, formatMoney } from "@/lib/rentalPricing.ts";
-import { SECURITY_DEPOSIT_AMOUNT } from "@/lib/securityDeposit.ts";
+import { isUnlimitedMileageService } from "@/lib/unlimitedMileage.ts";
+import { calculateRentalDays, formatMoney, isBeforePickup } from "@/lib/rentalPricing.ts";
+import { formatDateAtTime } from "@/lib/timeFormat.ts";
+import { format } from "date-fns";
+import { resolvePreAuthorizedAmount } from "@/config/appConfig.ts";
 import { computeBillSummary, getBillEntryTotals, projectCheckoutBalance } from "@/lib/billing.ts";
 import {
   FUEL_LABELS,
@@ -31,7 +34,21 @@ import {
   buildMainDriverCheckInForm,
   validateMainDriverCheckInDetails,
 } from "@/lib/mainDriver.ts";
+import { EMAIL_ERROR, isValidEmail } from "@/lib/email.ts";
+import { LICENSE_EXPIRY_ERROR, isLicenseExpiryAfterReturnDate } from "@/lib/licenseExpiry.ts";
+import { LICENSE_NUMBER_ERROR, isValidLicenseNumber } from "@/lib/licenseNumber.ts";
+import { DRIVER_AGE_ERROR, isDriverAtLeast18, maxDriverDateOfBirth } from "@/lib/driverAge.ts";
 import { Button } from "@/components/ui/button.tsx";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog.tsx";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog.tsx";
 import { Input } from "@/components/ui/input.tsx";
 import { Label } from "@/components/ui/label.tsx";
@@ -43,20 +60,15 @@ import { AgreementPdfPreview } from "@/components/agreement-pdf-preview.tsx";
 import { toast } from "sonner";
 import { LogIn, LogOut, SlidersHorizontal, Eye, EyeOff, Users, UserRound, Plus, Trash2, Loader2 } from "lucide-react";
 import { Hint } from "@/components/ui/tooltip.tsx";
-
-async function withUploadWakeLock<T>(run: () => Promise<T>): Promise<T> {
-  let lock: WakeLockSentinel | null = null;
-  try {
-    lock = (await navigator.wakeLock?.request("screen")) ?? null;
-  } catch {
-    // Older phones may not support keeping the screen awake.
-  }
-  try {
-    return await run();
-  } finally {
-    await lock?.release().catch(() => {});
-  }
-}
+import {
+  EMPTY_LICENSE_IMAGE,
+  clampPaidAmount,
+  formatDefaultPaidAmount,
+  invalidateAfterInspectionChange,
+  revokeLicensePreview,
+  withUploadWakeLock,
+  type LicenseImageDraft,
+} from "@/lib/checkInOutHelpers.ts";
 
 function InspectionUploadOverlay({
   open,
@@ -83,33 +95,6 @@ function InspectionUploadOverlay({
   );
 }
 
-function invalidateAfterInspectionChange(
-  queryClient: QueryClient,
-  bookingId: string,
-  carId?: string,
-) {
-  return Promise.all([
-    queryClient.invalidateQueries({ queryKey: ["inspections", bookingId] }),
-    queryClient.invalidateQueries({ queryKey: ["inspections", "check-in-out"] }),
-    queryClient.invalidateQueries({ queryKey: ["bookings", bookingId, "detail"] }),
-    queryClient.invalidateQueries({ queryKey: ["bookings"], exact: true }),
-    queryClient.invalidateQueries({ queryKey: ["bookings", "admin"] }),
-    queryClient.invalidateQueries({ queryKey: ["bookings", "admin", "overview"] }),
-    carId ? queryClient.invalidateQueries({ queryKey: ["cars", carId] }) : Promise.resolve(),
-  ]);
-}
-
-type LicenseImageDraft = {
-  file: File | null;
-  previewUrl: string;
-};
-
-const EMPTY_LICENSE_IMAGE: LicenseImageDraft = { file: null, previewUrl: "" };
-
-function revokeLicensePreview(image: LicenseImageDraft) {
-  if (image.previewUrl.startsWith("blob:")) URL.revokeObjectURL(image.previewUrl);
-}
-
 type CheckoutChargeDraft = {
   id: string;
   title: string;
@@ -117,22 +102,6 @@ type CheckoutChargeDraft = {
   description?: string;
   autoFuel?: boolean;
 };
-
-function clampPaidAmount(raw: string, maxAmount: number) {
-  if (raw.trim() === "") return "";
-  const amount = Number(raw);
-  if (!Number.isFinite(amount)) return raw;
-  if (amount < 0) return "0";
-  const cap = Math.round(Number(maxAmount || 0) * 100) / 100;
-  if (cap > 0 && amount > cap) return String(cap);
-  return raw;
-}
-
-function formatDefaultPaidAmount(amount: number) {
-  const rounded = Math.round(Number(amount || 0) * 100) / 100;
-  if (rounded <= 0) return "";
-  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(2);
-}
 
 function CheckInDialog({
   open,
@@ -154,6 +123,7 @@ function CheckInDialog({
 
   const [activeTab, setActiveTab] = useState<"form" | "signature">("form");
   const [formCompleted, setFormCompleted] = useState(false);
+  const [validationAttempted, setValidationAttempted] = useState(false);
   const [mileage, setMileage] = useState("");
   const [fuelLevel, setFuelLevel] = useState<FuelLevel>("full");
   const [notes, setNotes] = useState("");
@@ -201,10 +171,14 @@ function CheckInDialog({
   }, [booking.billEntries, booking.totalAmount, detail?.billEntries]);
 
   const customer = detail?.user;
+  const preAuthorizedAmount = resolvePreAuthorizedAmount(
+    detail?.securityDeposit?.amount ?? booking.securityDepositAmount,
+  );
 
   const resetState = () => {
     setActiveTab("form");
     setFormCompleted(false);
+    setValidationAttempted(false);
     setMileage("");
     setFuelLevel("full");
     setNotes("");
@@ -378,14 +352,16 @@ function CheckInDialog({
   }, [open, activeTab, booking._id, mainDriver, mileage, fuelLevel, notes, extraDrivers, paymentAmount]);
 
   const validateCheckInForm = () => {
+    setValidationAttempted(true);
     if (carMediaPreparing) return "Please wait — photos are still being prepared";
     if (!mileage) return "Please enter mileage";
-    const mainDriverError = validateMainDriverCheckInDetails(mainDriver);
+    const mainDriverError = validateMainDriverCheckInDetails(mainDriver, booking.returnDate);
     if (mainDriverError) return mainDriverError;
     const driverError = validateExtraDriverCheckInDetails(
       extraDriverCount,
       extraDrivers,
       extraLicenseImagesRef.current,
+      booking.returnDate,
     );
     if (driverError) return driverError;
     if (!mainLicenseImageRef.current.file) return "Main driver: license image is required";
@@ -532,7 +508,7 @@ function CheckInDialog({
     <Dialog open={open} onOpenChange={(nextOpen) => { if (nextOpen || loading) return; onClose(); }}>
       <DialogContent
         dismissible={false}
-        className="flex w-[calc(100vw-1rem)] max-w-4xl flex-col gap-0 overflow-hidden p-0 max-h-[min(92vh,880px)]"
+        className="flex w-[calc(100vw-1rem)] max-w-6xl sm:max-w-6xl flex-col gap-0 overflow-hidden p-0 max-h-[min(92vh,880px)]"
       >
         <InspectionUploadOverlay open={loading} label={savingLabel} percent={uploadPercent} />
         <DialogHeader className="shrink-0 px-4 pt-5 pb-3 sm:px-6 sm:pt-6">
@@ -550,9 +526,9 @@ function CheckInDialog({
             setActiveTab(v as "form" | "signature");
           }}
         >
-          <TabsList className="w-full">
-            <TabsTrigger value="form" className="flex-1 cursor-pointer">1. Check-In Form</TabsTrigger>
-            <TabsTrigger value="signature" className="flex-1 cursor-pointer" disabled={!formCompleted}>
+          <TabsList className="w-fit">
+            <TabsTrigger value="form" className="cursor-pointer">1. Check-In Form</TabsTrigger>
+            <TabsTrigger value="signature" className="cursor-pointer" disabled={!formCompleted}>
               2. Terms & Signature
             </TabsTrigger>
           </TabsList>
@@ -564,7 +540,7 @@ function CheckInDialog({
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label className="text-xs">Current Mileage (km) *</Label>
-                <Input type="number" value={mileage} onChange={(e) => setMileage(e.target.value)} placeholder="e.g. 45000" />
+                <Input type="number" value={mileage} onChange={(e) => setMileage(e.target.value)} />
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs">Fuel Level</Label>
@@ -589,57 +565,87 @@ function CheckInDialog({
                 </div>
               </div>
               <div className="space-y-3 rounded-lg border border-border/40 bg-background/70 p-3">
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Full Legal Name *</Label>
-                  <Input
-                    value={mainDriver.fullLegalName}
-                    onChange={(e) => updateMainDriverField("fullLegalName", e.target.value)}
-                    placeholder="Full legal name"
-                  />
-                </div>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div className="space-y-1.5">
-                    <Label className="text-xs">Date of Birth *</Label>
+                    <Label className="text-xs">Full Legal Name *</Label>
                     <Input
-                      type="date"
-                      value={mainDriver.dateOfBirth}
-                      onChange={(e) => updateMainDriverField("dateOfBirth", e.target.value)}
+                      value={mainDriver.fullLegalName}
+                      onChange={(e) => updateMainDriverField("fullLegalName", e.target.value)}
                     />
                   </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Email Address *</Label>
+                    <Input
+                      type="email"
+                      value={mainDriver.emailAddress}
+                      onChange={(e) => updateMainDriverField("emailAddress", e.target.value)}
+                      aria-invalid={Boolean(
+                        mainDriver.emailAddress.trim() && !isValidEmail(mainDriver.emailAddress),
+                      )}
+                    />
+                    {mainDriver.emailAddress.trim() && !isValidEmail(mainDriver.emailAddress) ? (
+                      <p className="text-[11px] text-destructive">{EMAIL_ERROR}</p>
+                    ) : null}
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div className="space-y-1.5">
                     <Label className="text-xs">Phone Number *</Label>
                     <Input
                       type="tel"
                       value={mainDriver.phoneNumber}
                       onChange={(e) => updateMainDriverField("phoneNumber", e.target.value)}
-                      placeholder="Phone number"
                     />
                   </div>
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Email Address *</Label>
-                  <Input
-                    type="email"
-                    value={mainDriver.emailAddress}
-                    onChange={(e) => updateMainDriverField("emailAddress", e.target.value)}
-                    placeholder="Email address"
-                  />
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Date of Birth *</Label>
+                    <Input
+                      type="date"
+                      value={mainDriver.dateOfBirth}
+                      max={maxDriverDateOfBirth()}
+                      onChange={(e) => updateMainDriverField("dateOfBirth", e.target.value)}
+                      aria-invalid={Boolean(
+                        mainDriver.dateOfBirth && !isDriverAtLeast18(mainDriver.dateOfBirth),
+                      )}
+                    />
+                    {mainDriver.dateOfBirth && !isDriverAtLeast18(mainDriver.dateOfBirth) ? (
+                      <p className="text-[11px] text-destructive">{DRIVER_AGE_ERROR}</p>
+                    ) : null}
+                  </div>
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-xs">Home Address *</Label>
                   <Input
                     value={mainDriver.homeAddressLine1}
                     onChange={(e) => updateMainDriverField("homeAddressLine1", e.target.value)}
-                    placeholder="Home address"
                   />
                 </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Driver&apos;s License No. *</Label>
-                  <Input
-                    value={mainDriver.licenseNumber}
-                    onChange={(e) => updateMainDriverField("licenseNumber", e.target.value)}
-                    placeholder="License number"
-                  />
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Driver&apos;s License No. *</Label>
+                    <Input
+                      value={mainDriver.licenseNumber}
+                      onChange={(e) => updateMainDriverField("licenseNumber", e.target.value)}
+                      required
+                      minLength={4}
+                      maxLength={15}
+                      aria-invalid={Boolean(
+                        (validationAttempted || mainDriver.licenseNumber.length > 0) &&
+                          !isValidLicenseNumber(mainDriver.licenseNumber),
+                      )}
+                    />
+                    {(validationAttempted || mainDriver.licenseNumber.length > 0) &&
+                    !isValidLicenseNumber(mainDriver.licenseNumber) ? (
+                      <p className="text-[11px] text-destructive">{LICENSE_NUMBER_ERROR}</p>
+                    ) : null}
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Policy No.</Label>
+                    <Input
+                      value={mainDriver.policyNo}
+                      onChange={(e) => updateMainDriverField("policyNo", e.target.value)}
+                    />
+                  </div>
                 </div>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div className="space-y-1.5">
@@ -647,7 +653,6 @@ function CheckInDialog({
                     <Input
                       value={mainDriver.issuingProvince}
                       onChange={(e) => updateMainDriverField("issuingProvince", e.target.value)}
-                      placeholder="e.g. Alberta"
                     />
                   </div>
                   <div className="space-y-1.5">
@@ -656,16 +661,22 @@ function CheckInDialog({
                       type="date"
                       value={mainDriver.licenseExpiryDate}
                       onChange={(e) => updateMainDriverField("licenseExpiryDate", e.target.value)}
+                      aria-invalid={Boolean(
+                        mainDriver.licenseExpiryDate.trim() &&
+                          !isLicenseExpiryAfterReturnDate(
+                            mainDriver.licenseExpiryDate,
+                            booking.returnDate,
+                          ),
+                      )}
                     />
+                    {mainDriver.licenseExpiryDate.trim() &&
+                    !isLicenseExpiryAfterReturnDate(
+                      mainDriver.licenseExpiryDate,
+                      booking.returnDate,
+                    ) ? (
+                      <p className="text-[11px] text-destructive">{LICENSE_EXPIRY_ERROR}</p>
+                    ) : null}
                   </div>
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Policy No.</Label>
-                  <Input
-                    value={mainDriver.policyNo}
-                    onChange={(e) => updateMainDriverField("policyNo", e.target.value)}
-                    placeholder="If applicable"
-                  />
                 </div>
                 <LicenseImageCapture
                   id="main-driver-license"
@@ -700,7 +711,6 @@ function CheckInDialog({
                       <Input
                         value={driver.fullName}
                         onChange={(e) => updateExtraDriverField(index, "fullName", e.target.value)}
-                        placeholder="Driver full name"
                       />
                     </div>
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -709,8 +719,18 @@ function CheckInDialog({
                         <Input
                           value={driver.licenseNumber}
                           onChange={(e) => updateExtraDriverField(index, "licenseNumber", e.target.value)}
-                          placeholder="License number"
+                          required
+                          minLength={4}
+                          maxLength={15}
+                          aria-invalid={Boolean(
+                            (validationAttempted || driver.licenseNumber.length > 0) &&
+                              !isValidLicenseNumber(driver.licenseNumber),
+                          )}
                         />
+                        {(validationAttempted || driver.licenseNumber.length > 0) &&
+                        !isValidLicenseNumber(driver.licenseNumber) ? (
+                          <p className="text-[11px] text-destructive">{LICENSE_NUMBER_ERROR}</p>
+                        ) : null}
                       </div>
                       <div className="space-y-1.5">
                         <Label className="text-xs">License Expiry Date *</Label>
@@ -718,7 +738,21 @@ function CheckInDialog({
                           type="date"
                           value={driver.licenseExpiryDate}
                           onChange={(e) => updateExtraDriverField(index, "licenseExpiryDate", e.target.value)}
+                          aria-invalid={Boolean(
+                            driver.licenseExpiryDate.trim() &&
+                              !isLicenseExpiryAfterReturnDate(
+                                driver.licenseExpiryDate,
+                                booking.returnDate,
+                              ),
+                          )}
                         />
+                        {driver.licenseExpiryDate.trim() &&
+                        !isLicenseExpiryAfterReturnDate(
+                          driver.licenseExpiryDate,
+                          booking.returnDate,
+                        ) ? (
+                          <p className="text-[11px] text-destructive">{LICENSE_EXPIRY_ERROR}</p>
+                        ) : null}
                       </div>
                     </div>
                     <div className="space-y-1.5">
@@ -726,7 +760,6 @@ function CheckInDialog({
                       <Input
                         value={driver.countryOfIssue}
                         onChange={(e) => updateExtraDriverField(index, "countryOfIssue", e.target.value)}
-                        placeholder="e.g. Canada"
                       />
                     </div>
                     <LicenseImageCapture
@@ -754,18 +787,17 @@ function CheckInDialog({
                 rows={2}
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
-                placeholder="Any scratches, damage or notes..."
               />
             </div>
             <div className="rounded-lg border border-border/50 bg-muted/20 p-3 space-y-2">
               <p className="text-xs font-medium">Security deposit (pre-authorization)</p>
               <p className="text-[11px] text-muted-foreground">
-                A ${SECURITY_DEPOSIT_AMOUNT} hold is placed at check-in. This is separate from the rental payment and is refundable after check-out.
+                A {formatMoney(preAuthorizedAmount)} hold is placed at check-in. This is separate from the rental payment and is refundable after check-out.
               </p>
               <div className="space-y-1.5">
                 <Label className="text-xs">Pre-Authorized Amount</Label>
                 <Input
-                  value={formatMoney(SECURITY_DEPOSIT_AMOUNT)}
+                  value={formatMoney(preAuthorizedAmount)}
                   readOnly
                   disabled
                   className="bg-muted/40 tabular-nums"
@@ -809,7 +841,6 @@ function CheckInDialog({
                     paymentAmountDirtyRef.current = true;
                     setPaymentAmount(clampPaidAmount(e.target.value, checkInBill.totalBill));
                   }}
-                  placeholder="e.g. 50.00"
                 />
                 <p className="text-[11px] text-muted-foreground">
                   Cannot exceed total amount {formatMoney(checkInBill.totalBill)}.
@@ -820,7 +851,6 @@ function CheckInDialog({
                 <Input
                   value={paymentDescription}
                   onChange={(e) => setPaymentDescription(e.target.value)}
-                  placeholder="e.g. 50% deposit"
                 />
               </div>
             </div>
@@ -833,10 +863,6 @@ function CheckInDialog({
           </TabsContent>
 
           <TabsContent value="signature" className="space-y-4 mt-4 pb-4">
-            <p className="text-sm text-muted-foreground">
-              Customer: review the rental agreement below, then sign in the signature pad. Your signature will be added to the agreement.
-            </p>
-
             <AgreementPdfPreview
               url={pdfPreviewUrl}
               filename={`check-in-agreement-${booking._id}.pdf`}
@@ -892,7 +918,13 @@ function CheckOutDialog({
     booking.inspections?.find((insp) => insp.type === "check_in");
   const checkInMileage = checkInInspection?.mileage;
   const checkInFuelLevel = normalizeFuelLevel(checkInInspection?.fuelLevel);
-  const dailyMileageLimit = car?.dailyMileageLimit ?? booking.bookedDailyMileageLimit ?? null;
+  const hasUnlimitedMileage =
+    detail?.services?.some(isUnlimitedMileageService) ||
+    booking.serviceSnapshots?.some(isUnlimitedMileageService) ||
+    false;
+  const dailyMileageLimit = hasUnlimitedMileage
+    ? null
+    : car?.dailyMileageLimit ?? booking.bookedDailyMileageLimit ?? null;
   const chargePerExtraKm = car?.chargePerExtraKm ?? booking.bookedChargePerExtraKm ?? null;
   const rentalDays = useMemo(
     () => calculateRentalDays(
@@ -923,6 +955,7 @@ function CheckOutDialog({
   const [paymentDescription, setPaymentDescription] = useState("");
   const [chargeDrafts, setChargeDrafts] = useState<CheckoutChargeDraft[]>([]);
   const [showChargeForm, setShowChargeForm] = useState(false);
+  const chargeFormRef = useRef<HTMLDivElement>(null);
   const [chargeTitle, setChargeTitle] = useState("");
   const [chargeAmount, setChargeAmount] = useState("");
   const [chargeDescription, setChargeDescription] = useState("");
@@ -1019,6 +1052,11 @@ function CheckOutDialog({
     }
     setPaymentAmount((current) => clampPaidAmount(current, checkoutBalance.totalUnpaid));
   }, [open, detail, checkoutBalance.totalUnpaid]);
+
+  useEffect(() => {
+    if (!showChargeForm) return;
+    chargeFormRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }, [showChargeForm]);
 
   const resetChargeForm = () => {
     setShowChargeForm(false);
@@ -1152,7 +1190,7 @@ function CheckOutDialog({
     <Dialog open={open} onOpenChange={(nextOpen) => { if (nextOpen || loading) return; onClose(); }}>
       <DialogContent
         dismissible={false}
-        className="flex w-[calc(100vw-1rem)] max-w-4xl flex-col gap-0 overflow-hidden p-0 max-h-[min(92vh,880px)]"
+        className="flex w-[calc(100vw-1rem)] max-w-6xl sm:max-w-6xl flex-col gap-0 overflow-hidden p-0 max-h-[min(92vh,880px)]"
       >
         <InspectionUploadOverlay open={loading} label={savingLabel} percent={uploadPercent} />
         <DialogHeader className="shrink-0 px-4 pt-5 pb-3 sm:px-6 sm:pt-6">
@@ -1162,23 +1200,15 @@ function CheckOutDialog({
           </DialogTitle>
         </DialogHeader>
         <div className="min-h-0 flex-1 overflow-y-auto px-4 py-1 sm:px-6 space-y-4">
-          <p className="text-sm text-muted-foreground">
-            Record the vehicle condition and upload photos for this booking.
-          </p>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label className="text-xs">Current Mileage (km) *</Label>
-              <Input type="number" value={mileage} onChange={(e) => setMileage(e.target.value)} placeholder="e.g. 45250" />
+              <Input type="number" value={mileage} onChange={(e) => setMileage(e.target.value)} />
               {checkInMileage != null && (
                 <p className="text-[11px] text-muted-foreground">
                   Check-in odometer: {checkInMileage.toLocaleString()} km
                 </p>
               )}
-              {dailyMileageLimit ? (
-                <p className="text-[11px] text-muted-foreground">
-                  Allowed: {(dailyMileageLimit * rentalDays).toLocaleString()} km ({dailyMileageLimit} km/day × {rentalDays} days)
-                </p>
-              ) : null}
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Fuel Level</Label>
@@ -1215,11 +1245,25 @@ function CheckOutDialog({
               </Button>
             </div>
           )}
-          <div className="rounded-lg border border-border/50 bg-muted/20 p-3 space-y-3">
-            <p className="text-xs font-medium">Additional billing entries</p>
-            <p className="text-[11px] text-muted-foreground">
-              Add fuel, damage, or other charges now. They will be saved with check-out.
-            </p>
+          <div
+            ref={chargeFormRef}
+            className="rounded-lg border border-border/50 bg-muted/20 p-3 space-y-3"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs font-medium">Additional billing entries</p>
+              {!showChargeForm && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="cursor-pointer shrink-0"
+                  onClick={() => setShowChargeForm(true)}
+                >
+                  <Plus className="h-3.5 w-3.5 mr-1.5" />
+                  Add billing entry
+                </Button>
+              )}
+            </div>
             {chargeDrafts.length > 0 && (
               <div className="space-y-2">
                 {chargeDrafts.map((charge) => {
@@ -1257,59 +1301,58 @@ function CheckOutDialog({
                 })}
               </div>
             )}
-            {!showChargeForm ? (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="cursor-pointer"
-                onClick={() => setShowChargeForm(true)}
-              >
-                <Plus className="h-3.5 w-3.5 mr-1.5" />
-                Add billing entry
-              </Button>
-            ) : (
-              <div className="rounded-lg border border-border/50 p-3 space-y-3 bg-background">
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Title *</Label>
-                  <Input
-                    value={chargeTitle}
-                    onChange={(e) => setChargeTitle(e.target.value)}
-                    placeholder="e.g. Fuel refill"
-                  />
+            {showChargeForm && (
+              <div className="rounded-lg border border-border/50 p-2.5 space-y-1.5 bg-background">
+                <div className="grid grid-cols-1 sm:grid-cols-[1fr_1.2fr_9rem_auto] gap-2 sm:gap-3 sm:items-end">
+                  <div className="space-y-1">
+                    <Label className="text-xs">Title *</Label>
+                    <Input
+                      value={chargeTitle}
+                      onChange={(e) => setChargeTitle(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Description</Label>
+                    <Input
+                      value={chargeDescription}
+                      onChange={(e) => setChargeDescription(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Amount ($, before tax) *</Label>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={chargeAmount}
+                      onChange={(e) => setChargeAmount(e.target.value)}
+                    />
+                  </div>
+                  <div className="flex justify-end gap-1.5">
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      className="h-8 px-2.5 text-xs cursor-pointer"
+                      onClick={resetChargeForm}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="h-8 px-2.5 text-xs cursor-pointer"
+                      onClick={addChargeDraft}
+                    >
+                      Add charge
+                    </Button>
+                  </div>
                 </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Description</Label>
-                  <Input
-                    value={chargeDescription}
-                    onChange={(e) => setChargeDescription(e.target.value)}
-                    placeholder="Optional details"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Amount ($, before tax) *</Label>
-                  <Input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={chargeAmount}
-                    onChange={(e) => setChargeAmount(e.target.value)}
-                    placeholder="0.00"
-                  />
-                  {chargeAmount && Number(chargeAmount) > 0 && (
-                    <p className="text-[11px] text-muted-foreground">
-                      Total with 5% tax: {formatMoney(getBillEntryTotals(Number(chargeAmount)).totalAmount)}
-                    </p>
-                  )}
-                </div>
-                <div className="flex gap-2">
-                  <Button type="button" variant="secondary" size="sm" className="cursor-pointer" onClick={resetChargeForm}>
-                    Cancel
-                  </Button>
-                  <Button type="button" size="sm" className="cursor-pointer" onClick={addChargeDraft}>
-                    Add charge
-                  </Button>
-                </div>
+                {chargeAmount && Number(chargeAmount) > 0 && (
+                  <p className="text-[11px] text-muted-foreground sm:text-right">
+                    Total with 5% tax: {formatMoney(getBillEntryTotals(Number(chargeAmount)).totalAmount)}
+                  </p>
+                )}
               </div>
             )}
           </div>
@@ -1317,8 +1360,14 @@ function CheckOutDialog({
             <div className="rounded-lg border border-border/50 bg-muted/20 p-3 text-xs space-y-1">
               <p className="font-medium">Mileage summary</p>
               <p>Driven: {mileagePreview.totalDrivenKm.toLocaleString()} km</p>
-              {dailyMileageLimit ? (
-                <p>Allowed: {mileagePreview.allowedMileageKm.toLocaleString()} km</p>
+              {hasUnlimitedMileage ? (
+                <p className="text-green-600 dark:text-green-400">
+                  Unlimited Mileage add-on applied
+                </p>
+              ) : dailyMileageLimit ? (
+                <p>
+                  Allowed: {mileagePreview.allowedMileageKm.toLocaleString()} km ({dailyMileageLimit} km/day × {rentalDays} days)
+                </p>
               ) : null}
               {mileagePreview.extraMileageKm > 0 ? (
                 <p className="text-primary font-semibold">
@@ -1342,97 +1391,98 @@ function CheckOutDialog({
               rows={2}
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder="Any scratches, damage or notes..."
             />
           </div>
           <div className="rounded-lg border border-border/50 bg-muted/20 p-3 space-y-3">
             <p className="text-xs font-medium">Final payment (optional)</p>
-            {detail ? (
-              <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 space-y-1.5 text-xs">
-                <p className="font-medium text-sm">Balance summary</p>
-                <div className="flex justify-between gap-3">
-                  <span className="text-muted-foreground">Total paid so far</span>
-                  <span className="font-medium text-green-600 tabular-nums">
-                    {formatMoney(checkoutBalance.totalPaid)}
-                  </span>
-                </div>
-                <div className="flex justify-between gap-3">
-                  <span className="text-muted-foreground">Pending balance</span>
-                  <span className="font-medium tabular-nums">
-                    {formatMoney(checkoutBalance.balanceBeforeExtra)}
-                  </span>
-                </div>
-                {checkoutBalance.extraMileageCharge > 0 && mileagePreview && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:items-start">
+              {detail ? (
+                <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 space-y-1.5 text-xs">
+                  <p className="font-medium text-sm">Balance summary</p>
                   <div className="flex justify-between gap-3">
-                    <span className="text-muted-foreground">
-                      Extra mileage
-                      {chargePerExtraKm
-                        ? ` (${mileagePreview.extraMileageKm} × $${chargePerExtraKm})`
-                        : ` (${mileagePreview.extraMileageKm} km)`}
-                    </span>
-                    <span className="font-medium tabular-nums">
-                      {formatMoney(checkoutBalance.extraMileageCharge)}
+                    <span className="text-muted-foreground">Total paid so far</span>
+                    <span className="font-medium text-green-600 tabular-nums">
+                      {formatMoney(checkoutBalance.totalPaid)}
                     </span>
                   </div>
-                )}
-                {chargeDrafts
-                  .filter((charge) => Number(charge.amount) > 0)
-                  .map((charge) => (
-                    <div key={charge.id} className="flex justify-between gap-3">
-                      <span className="text-muted-foreground min-w-0 truncate">
-                        {charge.title.trim() || "Charge"}
+                  <div className="flex justify-between gap-3">
+                    <span className="text-muted-foreground">Pending balance</span>
+                    <span className="font-medium tabular-nums">
+                      {formatMoney(checkoutBalance.balanceBeforeExtra)}
+                    </span>
+                  </div>
+                  {checkoutBalance.extraMileageCharge > 0 && mileagePreview && (
+                    <div className="flex justify-between gap-3">
+                      <span className="text-muted-foreground">
+                        Extra mileage
+                        {chargePerExtraKm
+                          ? ` (${mileagePreview.extraMileageKm} × $${chargePerExtraKm})`
+                          : ` (${mileagePreview.extraMileageKm} km)`}
                       </span>
-                      <span className="font-medium tabular-nums shrink-0">
-                        {formatMoney(charge.amount)}
+                      <span className="font-medium tabular-nums">
+                        {formatMoney(checkoutBalance.extraMileageCharge)}
                       </span>
                     </div>
-                  ))}
-                {checkoutBalance.addedTax > 0 && (
-                  <div className="flex justify-between gap-3">
-                    <span className="text-muted-foreground">Tax (5%)</span>
-                    <span className="font-medium tabular-nums">
-                      {formatMoney(checkoutBalance.addedTax)}
+                  )}
+                  {chargeDrafts
+                    .filter((charge) => Number(charge.amount) > 0)
+                    .map((charge) => (
+                      <div key={charge.id} className="flex justify-between gap-3">
+                        <span className="text-muted-foreground min-w-0 truncate">
+                          {charge.title.trim() || "Charge"}
+                        </span>
+                        <span className="font-medium tabular-nums shrink-0">
+                          {formatMoney(charge.amount)}
+                        </span>
+                      </div>
+                    ))}
+                  {checkoutBalance.addedTax > 0 && (
+                    <div className="flex justify-between gap-3">
+                      <span className="text-muted-foreground">Tax (5%)</span>
+                      <span className="font-medium tabular-nums">
+                        {formatMoney(checkoutBalance.addedTax)}
+                      </span>
+                    </div>
+                  )}
+                  <div className="flex justify-between gap-3 pt-1.5 border-t border-border/40">
+                    <span className="font-semibold">Total due at check-out</span>
+                    <span className="font-bold text-amber-600 tabular-nums">
+                      {formatMoney(checkoutBalance.totalUnpaid)}
                     </span>
                   </div>
-                )}
-                <div className="flex justify-between gap-3 pt-1.5 border-t border-border/40">
-                  <span className="font-semibold">Total due at check-out</span>
-                  <span className="font-bold text-amber-600 tabular-nums">
-                    {formatMoney(checkoutBalance.totalUnpaid)}
-                  </span>
+                </div>
+              ) : (
+                <p className="text-[11px] text-muted-foreground">Loading balance...</p>
+              )}
+              <div className="space-y-2.5">
+                <p className="text-[11px] text-muted-foreground">
+                  Record the amount collected from the customer at check-out.
+                </p>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Amount paid ($)</Label>
+                  <Input
+                    type="number"
+                    min="0"
+                    max={checkoutBalance.totalUnpaid || undefined}
+                    step="0.01"
+                    value={paymentAmount}
+                    onChange={(e) => {
+                      paymentAmountDirtyRef.current = true;
+                      setPaymentAmount(clampPaidAmount(e.target.value, checkoutBalance.totalUnpaid));
+                    }}
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    Cannot exceed {formatMoney(checkoutBalance.totalUnpaid)} due at check-out.
+                  </p>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Note</Label>
+                  <Input
+                    value={paymentDescription}
+                    onChange={(e) => setPaymentDescription(e.target.value)}
+                  />
                 </div>
               </div>
-            ) : (
-              <p className="text-[11px] text-muted-foreground">Loading balance...</p>
-            )}
-            <p className="text-[11px] text-muted-foreground">
-              Record the amount collected from the customer at check-out.
-            </p>
-            <div className="space-y-1.5">
-              <Label className="text-xs">Amount paid ($)</Label>
-              <Input
-                type="number"
-                min="0"
-                max={checkoutBalance.totalUnpaid || undefined}
-                step="0.01"
-                value={paymentAmount}
-                onChange={(e) => {
-                  paymentAmountDirtyRef.current = true;
-                  setPaymentAmount(clampPaidAmount(e.target.value, checkoutBalance.totalUnpaid));
-                }}
-                placeholder="e.g. 52.50"
-              />
-              <p className="text-[11px] text-muted-foreground">
-                Cannot exceed {formatMoney(checkoutBalance.totalUnpaid)} due at check-out.
-              </p>
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs">Note</Label>
-              <Input
-                value={paymentDescription}
-                onChange={(e) => setPaymentDescription(e.target.value)}
-                placeholder="e.g. Final balance"
-              />
             </div>
           </div>
         </div>
@@ -1621,12 +1671,25 @@ export function CheckInOutVisibilityControls({ booking }: { booking: Booking }) 
 export function AdminCheckInOutActions({ booking }: { booking: Booking }) {
   const [checkInOpen, setCheckInOpen] = useState(false);
   const [checkOutOpen, setCheckOutOpen] = useState(false);
+  const [earlyCheckInOpen, setEarlyCheckInOpen] = useState(false);
+  const pickupLabel = formatDateAtTime(
+    format(new Date(booking.pickupDate), "MMM d, yyyy"),
+    booking.pickupTime,
+  );
+
+  const requestCheckIn = () => {
+    if (isBeforePickup(booking.pickupDate, booking.pickupTime ?? "10:00")) {
+      setEarlyCheckInOpen(true);
+      return;
+    }
+    setCheckInOpen(true);
+  };
 
   return (
     <>
       <div className="flex flex-wrap gap-2">
         {booking.status === "confirmed" && (
-          <Button size="sm" className="h-8 text-xs cursor-pointer" onClick={() => setCheckInOpen(true)}>
+          <Button size="sm" className="h-8 text-xs cursor-pointer" onClick={requestCheckIn}>
             <LogIn className="h-3 w-3 mr-1" /> Check In
           </Button>
         )}
@@ -1636,6 +1699,29 @@ export function AdminCheckInOutActions({ booking }: { booking: Booking }) {
           </Button>
         )}
       </div>
+      <AlertDialog open={earlyCheckInOpen} onOpenChange={setEarlyCheckInOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Check in before rental period start?</AlertDialogTitle>
+            <AlertDialogDescription>
+              You are checking in this booking before the pickup date and time ({pickupLabel}).
+              Please confirm you want to continue.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="cursor-pointer">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="cursor-pointer"
+              onClick={() => {
+                setEarlyCheckInOpen(false);
+                setCheckInOpen(true);
+              }}
+            >
+              Confirm check-in
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       {checkInOpen && (
         <CheckInDialog open={checkInOpen} onClose={() => setCheckInOpen(false)} booking={booking} />
       )}

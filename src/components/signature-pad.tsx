@@ -145,8 +145,8 @@ export function SignaturePad({ onChange }: SignaturePadProps) {
       <canvas
         ref={canvasRef}
         width={640}
-        height={180}
-        className="w-full h-36 rounded-xl border border-border/60 bg-white touch-none cursor-crosshair"
+        height={260}
+        className="h-52 w-full rounded-xl border border-border/60 bg-white touch-none cursor-crosshair sm:h-64"
         onMouseDown={startDraw}
         onMouseMove={draw}
         onMouseUp={endDraw}

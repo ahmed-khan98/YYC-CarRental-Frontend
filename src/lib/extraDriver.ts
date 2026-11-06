@@ -1,6 +1,8 @@
 import type { Booking, ServiceCategory } from "@/types/index.ts";
 import type { ExtraDriverCheckInDetail } from "@/types/index.ts";
 import { isStoredMediaUrl } from "@/lib/mediaUrl.ts";
+import { LICENSE_EXPIRY_ERROR, isLicenseExpiryAfterReturnDate } from "@/lib/licenseExpiry.ts";
+import { LICENSE_NUMBER_ERROR, isValidLicenseNumber } from "@/lib/licenseNumber.ts";
 
 export type { ExtraDriverCheckInDetail };
 
@@ -56,6 +58,7 @@ export function validateExtraDriverCheckInDetails(
   expectedCount: number,
   extraDrivers: ExtraDriverCheckInDetail[],
   licenseImages: Array<{ file?: File | null } | null | undefined> = [],
+  returnDate?: string | Date | null,
 ): string | null {
   if (expectedCount < 1) return null;
 
@@ -66,8 +69,11 @@ export function validateExtraDriverCheckInDetails(
   for (let i = 0; i < extraDrivers.length; i++) {
     const driver = extraDrivers[i];
     if (!driver.fullName.trim()) return `Driver ${i + 1}: full name is required`;
-    if (!driver.licenseNumber.trim()) return `Driver ${i + 1}: license number is required`;
+    if (!isValidLicenseNumber(driver.licenseNumber)) return LICENSE_NUMBER_ERROR;
     if (!driver.licenseExpiryDate.trim()) return `Driver ${i + 1}: license expiry date is required`;
+    if (!isLicenseExpiryAfterReturnDate(driver.licenseExpiryDate, returnDate)) {
+      return LICENSE_EXPIRY_ERROR;
+    }
     if (!driver.countryOfIssue.trim()) return `Driver ${i + 1}: country of issue is required`;
     if (!extraDriverHasLicenseImage(driver, licenseImages[i])) {
       return `Driver ${i + 1}: license image is required`;

@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import { Fragment, type ReactNode } from "react";
+import { Fragment, memo, type ReactNode } from "react";
 import { Skeleton } from "@/components/ui/skeleton.tsx";
 import {
   Table,
@@ -35,7 +35,7 @@ type AdminDataTableProps<T> = {
   renderExpandedRow?: (row: T) => ReactNode;
 };
 
-export function AdminDataTable<T>({
+function AdminDataTableInner<T>({
   columns,
   data,
   getRowKey,
@@ -137,3 +137,5 @@ export function AdminDataTable<T>({
     </div>
   );
 }
+
+export const AdminDataTable = memo(AdminDataTableInner) as typeof AdminDataTableInner;

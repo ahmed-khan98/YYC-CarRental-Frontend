@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { bookingsApi } from "@/api/bookings.api.ts";
 import type { BillEntry } from "@/types/index.ts";
-import { listBookingInvoices, type BookingInvoice } from "@/lib/billing.ts";
+import { invoiceKindLabel, listBookingInvoices, type BookingInvoice } from "@/lib/billing.ts";
 import { Button } from "@/components/ui/button.tsx";
 import {
   BookingDetailCard,
@@ -17,12 +17,6 @@ type AdminInvoicesPanelProps = {
   bookingId: string;
   billEntries: BillEntry[];
 };
-
-function invoiceKindLabel(invoice: BookingInvoice) {
-  if (invoice.kind === "payment") return "Payment";
-  if (invoice.kind === "charge") return "Charge";
-  return "Account";
-}
 
 export function AdminInvoicesPanel({ bookingId, billEntries }: AdminInvoicesPanelProps) {
   const [downloadingKeys, setDownloadingKeys] = useState<string[]>([]);

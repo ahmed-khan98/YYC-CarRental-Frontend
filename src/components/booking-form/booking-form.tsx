@@ -9,6 +9,7 @@ import { locationsApi } from "@/api/locations.api.ts";
 import { servicesApi } from "@/api/services.api.ts";
 import { bookingsApi } from "@/api/bookings.api.ts";
 import { getApiErrorMessage } from "@/api/client.ts";
+import { listItems } from "@/lib/pagination.ts";
 import { Button } from "@/components/ui/button.tsx";
 import { Skeleton } from "@/components/ui/skeleton.tsx";
 import { BookingVehicleCard } from "@/components/booking-detail-ui.tsx";
@@ -18,11 +19,13 @@ import { BookingServicesSection } from "@/components/booking-form/booking-servic
 import { BookingNotesSection } from "@/components/booking-form/booking-notes-section.tsx";
 import { BookingSummaryPanel } from "@/components/booking-form/booking-summary-panel.tsx";
 import { useBookingQuote } from "@/hooks/use-booking-quote.ts";
-import { isValidRentalPeriod } from "@/lib/rentalPricing.ts";
 import { isExtraDriverService } from "@/lib/extraDriver.ts";
 import { serviceAllowsQuantity } from "@/lib/serviceQuantity.ts";
 import { toast } from "sonner";
 import { carPrimaryImage } from "@/lib/mediaUrl.ts";
+import { validateBookingForm } from "@/components/booking-form/validateBookingForm.ts";
+import { resizeNameList } from "@/lib/bookingServicesState.ts";
+import { todayYmd } from "@/lib/bookingWindow.ts";
 
 const CAR_IMAGES: Record<string, string> = {
   economy: "https://images.unsplash.com/photo-1690278289651-895463644114?w=600&q=80",
@@ -66,14 +69,6 @@ type BookingFormProps = {
   carId: string;
 };
 
-function resizeNameList(current: string[], nextCount: number) {
-  if (current.length === nextCount) return current;
-  if (current.length < nextCount) {
-    return [...current, ...Array.from({ length: nextCount - current.length }, () => "")];
-  }
-  return current.slice(0, nextCount);
-}
-
 export function BookingForm({ carId }: BookingFormProps) {
   const queryClient = useQueryClient();
   const [searchParams] = useSearchParams();
@@ -83,23 +78,25 @@ export function BookingForm({ carId }: BookingFormProps) {
     queryFn: () => carsApi.get(carId),
     staleTime: 60_000,
   });
-  const { data: locations = [], isLoading: locationsLoading } = useQuery({
+  const { data: locationsResult, isLoading: locationsLoading } = useQuery({
     queryKey: ["locations", { activeOnly: true }],
     queryFn: () => locationsApi.list(true),
     staleTime: 60_000,
   });
-  const { data: services = [], isLoading: servicesLoading } = useQuery({
+  const { data: servicesResult, isLoading: servicesLoading } = useQuery({
     queryKey: ["services", { activeOnly: true }],
     queryFn: () => servicesApi.list(true),
     staleTime: 60_000,
   });
+  const locations = listItems(locationsResult);
+  const services = listItems(servicesResult);
 
   const createBooking = useMutation({
     mutationFn: bookingsApi.create,
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["bookings"] }),
   });
 
-  const today = useMemo(() => format(new Date(), "yyyy-MM-dd"), []);
+  const today = useMemo(() => todayYmd(), []);
   const tomorrow = useMemo(() => format(new Date(Date.now() + 86400000), "yyyy-MM-dd"), []);
 
   const [pickupDate, setPickupDate] = useState(() => searchParams.get("pickupDate") ?? today);
@@ -195,28 +192,19 @@ export function BookingForm({ carId }: BookingFormProps) {
 
   const handleSubmit = useCallback(async () => {
     if (submittingRef.current || loading || !car) return;
-    if (!pickupLocationId) {
-      toast.error("Please select a pickup location");
+    const validationError = validateBookingForm({
+      pickupLocationId,
+      dropoffLocationId,
+      pickupDate,
+      pickupTime,
+      returnDate,
+      returnTime,
+      hasExtraDriver,
+      extraDriverNames,
+    });
+    if (validationError) {
+      toast.error(validationError);
       return;
-    }
-    if (!dropoffLocationId) {
-      toast.error("Please select a drop-off location");
-      return;
-    }
-    if (!pickupDate || !returnDate) {
-      toast.error("Please select dates");
-      return;
-    }
-    if (!isValidRentalPeriod(pickupDate, pickupTime, returnDate, returnTime)) {
-      toast.error("Drop-off must be after pickup date and time");
-      return;
-    }
-    if (hasExtraDriver) {
-      const missingName = extraDriverNames.findIndex((name) => !name.trim());
-      if (missingName !== -1) {
-        toast.error(`Please enter the full name for additional driver ${missingName + 1}`);
-        return;
-      }
     }
 
     submittingRef.current = true;

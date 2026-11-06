@@ -5,17 +5,17 @@ import { getApiErrorMessage } from "@/api/client.ts";
 import { Button } from "@/components/ui/button.tsx";
 import { Input } from "@/components/ui/input.tsx";
 import { Label } from "@/components/ui/label.tsx";
-import { Badge } from "@/components/ui/badge.tsx";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog.tsx";
 import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog.tsx";
-import { Switch } from "@/components/ui/switch.tsx";
 import { AdminDataTable, type AdminTableColumn } from "@/components/admin-data-table.tsx";
+import { AdminListPagination } from "@/components/admin-list-pagination.tsx";
 import { toast } from "sonner";
 import { Eye, EyeOff, Pencil, Plus, Trash2, UserCog } from "lucide-react";
 import { Hint } from "@/components/ui/tooltip.tsx";
 import { formatDisplayName } from "@/lib/displayName.ts";
-import { cn } from "@/lib/utils.ts";
 import type { User } from "@/types/index.ts";
+import { ADMIN_LIST_LIMIT, listItems, listMeta } from "@/lib/pagination.ts";
+import { EMAIL_ERROR, isValidEmail } from "@/lib/email.ts";
 
 export default function AdminTeamPage() {
   const queryClient = useQueryClient();
@@ -26,11 +26,15 @@ export default function AdminTeamPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [emailError, setEmailError] = useState<string | null>(null);
 
-  const { data: subAdmins, isLoading } = useQuery({
-    queryKey: ["users", "sub-admins"],
-    queryFn: () => usersApi.listSubAdmins(),
+  const [page, setPage] = useState(1);
+  const { data: subAdminsResult, isLoading } = useQuery({
+    queryKey: ["users", "sub-admins", { page, limit: ADMIN_LIST_LIMIT }],
+    queryFn: () => usersApi.listSubAdmins({ page, limit: ADMIN_LIST_LIMIT }),
   });
+  const subAdmins = listItems(subAdminsResult);
+  const subAdminsMeta = listMeta(subAdminsResult, page, ADMIN_LIST_LIMIT);
 
   const createMutation = useMutation({
     mutationFn: usersApi.createSubAdmin,
@@ -60,19 +64,30 @@ export default function AdminTeamPage() {
     onError: (err) => toast.error(getApiErrorMessage(err)),
   });
 
-  const toggleMutation = useMutation({
-    mutationFn: ({ userId, isActive }: { userId: string; isActive: boolean }) =>
-      usersApi.updateSubAdmin(userId, { isActive }),
-    onSuccess: (_, { isActive }) => {
-      queryClient.invalidateQueries({ queryKey: ["users", "sub-admins"] });
-      queryClient.invalidateQueries({ queryKey: ["users"] });
-      toast.success(`Sub-Admin ${isActive ? "activated" : "deactivated"}`);
-    },
-    onError: (err) => toast.error(getApiErrorMessage(err)),
-  });
+  // Temporary: Active toggle handler hidden — will return later
+  // const toggleMutation = useMutation({
+  //   mutationFn: ({ userId, isActive }: { userId: string; isActive: boolean }) =>
+  //     usersApi.updateSubAdmin(userId, { isActive }),
+  //   onSuccess: (_, { isActive }) => {
+  //     queryClient.invalidateQueries({ queryKey: ["users", "sub-admins"] });
+  //     queryClient.invalidateQueries({ queryKey: ["users"] });
+  //     toast.success(`Sub-Admin ${isActive ? "activated" : "deactivated"}`);
+  //   },
+  //   onError: (err) => toast.error(getApiErrorMessage(err)),
+  // });
 
-  const deleteMutation = useMutation({
-    mutationFn: usersApi.deleteSubAdmin,
+  // Temporary: hard delete commented out — delete button calls deactivate
+  // const deleteMutation = useMutation({
+  //   mutationFn: usersApi.deleteSubAdmin,
+  //   onSuccess: () => {
+  //     queryClient.invalidateQueries({ queryKey: ["users", "sub-admins"] });
+  //     queryClient.invalidateQueries({ queryKey: ["users"] });
+  //     toast.success("Sub-Admin removed");
+  //   },
+  //   onError: (err) => toast.error(getApiErrorMessage(err)),
+  // });
+  const deactivateMutation = useMutation({
+    mutationFn: usersApi.deactivateSubAdmin,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["users", "sub-admins"] });
       queryClient.invalidateQueries({ queryKey: ["users"] });
@@ -87,6 +102,7 @@ export default function AdminTeamPage() {
     setEmail("");
     setPassword("");
     setShowPassword(false);
+    setEmailError(null);
   };
 
   const closeDialog = () => {
@@ -113,6 +129,11 @@ export default function AdminTeamPage() {
       toast.error("Please fill in name and email");
       return;
     }
+    if (!isValidEmail(email)) {
+      setEmailError(EMAIL_ERROR);
+      return;
+    }
+    setEmailError(null);
     if (!editing && !password) {
       toast.error("Please fill in all fields");
       return;
@@ -135,13 +156,17 @@ export default function AdminTeamPage() {
     createMutation.mutate({ name: name.trim(), email: email.trim(), password });
   };
 
-  const handleToggle = (userId: string, current: boolean) => {
-    toggleMutation.mutate({ userId, isActive: !current });
-  };
+  // Temporary: Active toggle handler hidden — will return later
+  // const handleToggle = (userId: string, current: boolean) => {
+  //   toggleMutation.mutate({ userId, isActive: !current });
+  // };
 
   const handleDelete = () => {
     if (!deleteTarget) return;
-    deleteMutation.mutate(deleteTarget._id, {
+    // deleteMutation.mutate(deleteTarget._id, {
+    //   onSuccess: () => setDeleteTarget(null),
+    // });
+    deactivateMutation.mutate(deleteTarget._id, {
       onSuccess: () => setDeleteTarget(null),
     });
   };
@@ -164,35 +189,36 @@ export default function AdminTeamPage() {
       header: "Email",
       cell: (user) => <span className="text-sm text-muted-foreground">{user.email ?? "—"}</span>,
     },
-    {
-      id: "status",
-      header: "Status",
-      cell: (user) => {
-        const active = user.isActive !== false;
-        return (
-          <div className="flex items-center gap-2">
-            <Switch
-              checked={active}
-              onCheckedChange={() => handleToggle(user._id, active)}
-              disabled={toggleMutation.isPending}
-              className="cursor-pointer"
-              aria-label={active ? "Deactivate sub-admin" : "Activate sub-admin"}
-            />
-            <Badge
-              variant="outline"
-              className={cn(
-                "text-[11px] font-medium border",
-                active
-                  ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                  : "bg-red-50 text-red-700 border-red-200",
-              )}
-            >
-              {active ? "Active" : "Inactive"}
-            </Badge>
-          </div>
-        );
-      },
-    },
+    // Temporary: Status badge + Active toggle column hidden — do not delete
+    // {
+    //   id: "status",
+    //   header: "Status",
+    //   cell: (user) => {
+    //     const active = user.isActive !== false;
+    //     return (
+    //       <div className="flex items-center gap-2">
+    //         <Switch
+    //           checked={active}
+    //           onCheckedChange={() => handleToggle(user._id, active)}
+    //           disabled={toggleMutation.isPending}
+    //           className="cursor-pointer"
+    //           aria-label={active ? "Deactivate sub-admin" : "Activate sub-admin"}
+    //         />
+    //         <Badge
+    //           variant="outline"
+    //           className={cn(
+    //             "text-[11px] font-medium border",
+    //             active
+    //               ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+    //               : "bg-red-50 text-red-700 border-red-200",
+    //           )}
+    //         >
+    //           {active ? "Active" : "Inactive"}
+    //         </Badge>
+    //       </div>
+    //     );
+    //   },
+    // },
     {
       id: "actions",
       header: "Actions",
@@ -218,7 +244,7 @@ export default function AdminTeamPage() {
               onClick={() => setDeleteTarget(user)}
               className="cursor-pointer h-8 w-8 text-destructive hover:text-destructive"
               aria-label="Remove sub-admin"
-              disabled={deleteMutation.isPending}
+              disabled={deactivateMutation.isPending}
             >
               <Trash2 className="h-4 w-4" />
             </Button>
@@ -234,7 +260,7 @@ export default function AdminTeamPage() {
         <div>
           <h2 className="text-2xl font-bold">Sub-Admins</h2>
           <p className="text-muted-foreground text-sm">
-            {subAdmins?.length ?? 0} team member{(subAdmins?.length ?? 0) === 1 ? "" : "s"}
+            {subAdminsMeta.total} team member{subAdminsMeta.total === 1 ? "" : "s"}
           </p>
         </div>
         <Button onClick={openCreate} className="cursor-pointer">
@@ -245,12 +271,21 @@ export default function AdminTeamPage() {
 
       <AdminDataTable
         columns={columns}
-        data={subAdmins ?? []}
+        data={subAdmins}
         getRowKey={(user) => user._id}
         isLoading={isLoading}
         emptyIcon={UserCog}
         emptyMessage="No sub-admin accounts yet"
       />
+      {!isLoading && (
+        <AdminListPagination
+          page={subAdminsMeta.page}
+          totalPages={subAdminsMeta.totalPages}
+          total={subAdminsMeta.total}
+          limit={subAdminsMeta.limit}
+          onPageChange={setPage}
+        />
+      )}
 
       <Dialog
         open={open}
@@ -270,7 +305,6 @@ export default function AdminTeamPage() {
                 id="subadmin-name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="Jane Smith"
               />
             </div>
             <div className="space-y-1.5">
@@ -279,9 +313,13 @@ export default function AdminTeamPage() {
                 id="subadmin-email"
                 type="email"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="jane@example.com"
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  if (emailError) setEmailError(null);
+                }}
+                aria-invalid={Boolean(emailError)}
               />
+              {emailError ? <p className="text-[11px] text-destructive">{emailError}</p> : null}
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="subadmin-password">
@@ -293,7 +331,6 @@ export default function AdminTeamPage() {
                   type={showPassword ? "text" : "password"}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder={editing ? "Leave blank to keep current password" : "Min. 6 characters"}
                   minLength={6}
                   autoComplete="new-password"
                   className="pr-11"
@@ -341,7 +378,7 @@ export default function AdminTeamPage() {
             : ""
         }
         confirmLabel="Remove"
-        loading={deleteMutation.isPending}
+        loading={deactivateMutation.isPending}
         onConfirm={handleDelete}
       />
     </div>

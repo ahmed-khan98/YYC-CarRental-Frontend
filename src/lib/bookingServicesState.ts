@@ -8,7 +8,7 @@ export type BookingServicesFormState = {
   extraDriverNames: string[];
 };
 
-function resizeNameList(current: string[], nextCount: number) {
+export function resizeNameList(current: string[], nextCount: number) {
   if (current.length === nextCount) return current;
   if (current.length < nextCount) {
     return [...current, ...Array.from({ length: nextCount - current.length }, () => "")];

@@ -61,3 +61,10 @@ export function buildBookingDateGroups(
     }))
     .sort((a, b) => b.dateKey.localeCompare(a.dateKey));
 }
+
+export function dateGroupItemKey(item: DateGroupItem): string {
+  if (item.kind === "booking") {
+    return `booking-${item.booking._id}-${item.sortTime}`;
+  }
+  return `inspection-${item.inspection._id}`;
+}

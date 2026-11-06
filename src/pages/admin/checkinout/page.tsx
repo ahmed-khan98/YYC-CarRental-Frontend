@@ -5,8 +5,10 @@ import { inspectionsApi } from "@/api/inspections.api.ts";
 import type { Booking } from "@/types/index.ts";
 import { Badge } from "@/components/ui/badge.tsx";
 import { Button } from "@/components/ui/button.tsx";
-import { Card, CardContent } from "@/components/ui/card.tsx";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs.tsx";
 import { AdminDataTable, type AdminTableColumn } from "@/components/admin-data-table.tsx";
+import { AdminListPagination } from "@/components/admin-list-pagination.tsx";
+import { ADMIN_LIST_LIMIT, listItems, listMeta } from "@/lib/pagination.ts";
 import { formatDateWithTime } from "@/lib/timeFormat.ts";
 import { bookingVehicle, formatCarName, formatDisplayName } from "@/lib/displayName.ts";
 import { carPrimaryImage, resolveMediaUrl } from "@/lib/mediaUrl.ts";
@@ -122,12 +124,10 @@ function BookingExpandedPanel({
 }
 
 function CheckInOutBookingTable({
-  title,
   bookings,
   isLoading,
   emptyMessage,
 }: {
-  title: string;
   bookings: Booking[];
   isLoading?: boolean;
   emptyMessage?: string;
@@ -226,8 +226,7 @@ function CheckInOutBookingTable({
   }
 
   return (
-    <div className="space-y-2">
-      <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wider">{title}</h3>
+    <div>
       <AdminDataTable
         columns={columns}
         data={bookings}
@@ -244,24 +243,55 @@ function CheckInOutBookingTable({
   );
 }
 
+type BoardTab = "awaiting" | "out" | "completed";
+
 export default function AdminCheckInOutPage() {
-  const { data: bookings, isLoading } = useQuery({
-    queryKey: ["inspections", "check-in-out"],
-    queryFn: () => inspectionsApi.checkInOutBoard(),
+  const [activeTab, setActiveTab] = useState<BoardTab>("awaiting");
+  const [pages, setPages] = useState<Record<BoardTab, number>>({
+    awaiting: 1,
+    out: 1,
+    completed: 1,
   });
 
-  const confirmedBookings = (bookings ?? []).filter((b) => b.status === "confirmed");
-  const checkedInBookings = (bookings ?? []).filter((b) => b.status === "checked_in");
-  const completedRecently = (bookings ?? [])
-    .filter((b) => b.status === "completed")
-    .sort((a, b) => b._creationTime - a._creationTime)
-    .slice(0, 10);
+  const boardQueries = {
+    awaiting: useQuery({
+      queryKey: ["inspections", "check-in-out", "confirmed", { page: pages.awaiting, limit: ADMIN_LIST_LIMIT }],
+      queryFn: () => inspectionsApi.checkInOutBoard({
+        status: "confirmed",
+        page: pages.awaiting,
+        limit: ADMIN_LIST_LIMIT,
+      }),
+      enabled: activeTab === "awaiting",
+      staleTime: 60_000,
+    }),
+    out: useQuery({
+      queryKey: ["inspections", "check-in-out", "checked_in", { page: pages.out, limit: ADMIN_LIST_LIMIT }],
+      queryFn: () => inspectionsApi.checkInOutBoard({
+        status: "checked_in",
+        page: pages.out,
+        limit: ADMIN_LIST_LIMIT,
+      }),
+      enabled: activeTab === "out",
+      staleTime: 60_000,
+    }),
+    completed: useQuery({
+      queryKey: ["inspections", "check-in-out", "completed", { page: pages.completed, limit: ADMIN_LIST_LIMIT }],
+      queryFn: () => inspectionsApi.checkInOutBoard({
+        status: "completed",
+        page: pages.completed,
+        limit: ADMIN_LIST_LIMIT,
+      }),
+      enabled: activeTab === "completed",
+      staleTime: 60_000,
+    }),
+  };
 
-  const stats = [
-    { label: "Awaiting Check-in", value: confirmedBookings.length, color: "text-primary" },
-    { label: "Currently Out", value: checkedInBookings.length, color: "text-blue-400" },
-    { label: "Completed (recent)", value: completedRecently.length, color: "text-green-400" },
-  ];
+  const activeQuery = boardQueries[activeTab];
+  const bookings = listItems(activeQuery.data);
+  const bookingsMeta = listMeta(activeQuery.data, pages[activeTab], ADMIN_LIST_LIMIT);
+  const setActivePage = (page: number) => {
+    setPages((current) => ({ ...current, [activeTab]: page }));
+  };
 
   return (
     <div className="px-2.5 py-3 sm:p-6 space-y-4 sm:space-y-6">
@@ -272,35 +302,37 @@ export default function AdminCheckInOutPage() {
         </p>
       </div>
 
-      <div className="grid grid-cols-3 gap-1.5 sm:gap-4">
-        {stats.map((s) => (
-          <Card key={s.label} className="border-border/50 bg-card/40 text-center py-4">
-            <CardContent className="p-0">
-              <p className={`text-2xl font-bold ${s.color}`}>{s.value}</p>
-              <p className="text-xs text-muted-foreground mt-0.5">{s.label}</p>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as BoardTab)}>
+        <TabsList className="h-auto w-fit">
+          <TabsTrigger value="awaiting" className="min-h-8 px-2.5 text-xs">
+            Awaiting Check-in
+          </TabsTrigger>
+          <TabsTrigger value="out" className="min-h-8 px-2.5 text-xs">
+            Currently Out
+          </TabsTrigger>
+          <TabsTrigger value="completed" className="min-h-8 px-2.5 text-xs">
+            Completed
+          </TabsTrigger>
+        </TabsList>
 
-      <CheckInOutBookingTable
-        title="Awaiting Check-in"
-        bookings={confirmedBookings}
-        isLoading={isLoading}
-      />
+        <TabsContent value={activeTab} className="mt-2">
+          <CheckInOutBookingTable
+            bookings={bookings}
+            isLoading={activeQuery.isLoading}
+            emptyMessage={activeTab === "completed" ? "No completed rentals yet" : "No bookings"}
+          />
+        </TabsContent>
+      </Tabs>
 
-      <CheckInOutBookingTable
-        title="Currently Out"
-        bookings={checkedInBookings}
-        isLoading={isLoading}
-      />
-
-      <CheckInOutBookingTable
-        title="Recently Completed"
-        bookings={completedRecently}
-        isLoading={isLoading}
-        emptyMessage="No completed rentals yet"
-      />
+      {!activeQuery.isLoading && bookingsMeta.totalPages > 1 && (
+        <AdminListPagination
+          page={bookingsMeta.page}
+          totalPages={bookingsMeta.totalPages}
+          total={bookingsMeta.total}
+          limit={bookingsMeta.limit}
+          onPageChange={setActivePage}
+        />
+      )}
     </div>
   );
 }

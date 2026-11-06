@@ -36,6 +36,10 @@ export async function openPdfAfterFetch(
   fetchBlob: () => Promise<Blob>,
   filename: string,
 ) {
+  if (!isMobileBrowser()) {
+    openPdfBlob(await fetchBlob(), filename);
+    return;
+  }
   const popup = window.open("about:blank", "_blank");
   try {
     const pdf = asPdfBlob(await fetchBlob(), filename);

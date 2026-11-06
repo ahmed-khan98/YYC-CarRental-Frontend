@@ -26,6 +26,13 @@ export function resolveBillEntryTotalAmount(entry: BillEntry): number {
   if (entry.entryType !== "charge") return entry.amount;
   return getBillEntryTotals(entry.amount).totalAmount;
 }
+
+/** Paid deposit/e-transfer charges settle the bill without a payment line. */
+export function isStandalonePaidCharge(entry: BillEntry) {
+  if (entry.entryType !== "charge" || entry.source !== "manual") return false;
+  if (resolveEntryStatus(entry) !== "paid") return false;
+  return entry.paidVia === "deposit" || entry.paidVia === "e_transfer";
+}
 export function computeBillSummary(entries: BillEntry[] = []): BillSummary {
   const charges = entries.filter((e) => e.entryType === "charge");
   const payments = entries.filter((e) => e.entryType === "payment");
@@ -250,5 +257,20 @@ export const BILL_ENTRY_STATUS_COLORS: Record<BillEntryStatus, string> = {
   paid: "bg-green-500/15 text-green-600 border-green-500/30",
   refund: "bg-blue-500/15 text-blue-600 border-blue-500/30",
 };
+
+export function hasCheckOutPayment(entries: BillEntry[]) {
+  return entries.some(
+    (entry) =>
+      entry.entryType === "payment" &&
+      entry.status !== "refund" &&
+      /check[\s-]?out/i.test(entry.title ?? ""),
+  );
+}
+
+export function invoiceKindLabel(invoice: BookingInvoice) {
+  if (invoice.kind === "payment") return "Payment";
+  if (invoice.kind === "charge") return "Charge";
+  return "Account";
+}
 
 export { formatMoney };

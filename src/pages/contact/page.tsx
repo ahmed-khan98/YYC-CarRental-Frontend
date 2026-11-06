@@ -1,17 +1,9 @@
-import { useState, type FormEvent } from "react";
 import Navbar from "@/components/navbar.tsx";
 import Footer from "@/components/footer.tsx";
 import { motion } from "motion/react";
-import { MapPin, Phone, Mail, Send, Loader2, CircleCheck, CircleAlert } from "lucide-react";
-import { Button } from "@/components/ui/button.tsx";
-import { Input } from "@/components/ui/input.tsx";
-import { Label } from "@/components/ui/label.tsx";
-import { Textarea } from "@/components/ui/textarea.tsx";
+import { MapPin, Phone, Mail } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card.tsx";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert.tsx";
-import { toast } from "sonner";
-import { contactApi } from "@/api/contact.api.ts";
-import { getApiErrorMessage } from "@/api/client.ts";
+import { ContactForm } from "@/pages/contact/contact-form.tsx";
 
 const CONTACT = {
   address: "Calgary, Alberta, Canada",
@@ -20,56 +12,7 @@ const CONTACT = {
   email: "info@yyccarrental.com",
 };
 
-const EMPTY_FORM = {
-  fullName: "",
-  email: "",
-  phone: "",
-  message: "",
-};
-
-const SUCCESS_COPY = "Message sent. We'll get back to you soon.";
-
 export default function ContactPage() {
-  const [form, setForm] = useState(EMPTY_FORM);
-  const [sending, setSending] = useState(false);
-  const [feedback, setFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
-
-  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const fullName = form.fullName.trim();
-    const email = form.email.trim();
-    const phone = form.phone.trim();
-    const message = form.message.trim();
-
-    if (!fullName || !email || !phone || !message) {
-      const messageText = "Please fill in all required fields.";
-      setFeedback({ type: "error", message: messageText });
-      toast.error(messageText);
-      return;
-    }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      const messageText = "Enter a valid email address.";
-      setFeedback({ type: "error", message: messageText });
-      toast.error(messageText);
-      return;
-    }
-
-    setFeedback(null);
-    setSending(true);
-    try {
-      await contactApi.submit({ fullName, email, phone, message });
-      toast.success(SUCCESS_COPY, { duration: 8000 });
-      setForm(EMPTY_FORM);
-      setFeedback({ type: "success", message: SUCCESS_COPY });
-    } catch (error) {
-      const messageText = getApiErrorMessage(error);
-      setFeedback({ type: "error", message: messageText });
-      toast.error(messageText, { duration: 8000 });
-    } finally {
-      setSending(false);
-    }
-  };
-
   return (
     <div className="min-h-screen flex flex-col bg-background">
       <Navbar />
@@ -170,94 +113,7 @@ export default function ContactPage() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <form onSubmit={handleSubmit} className="space-y-4" noValidate>
-                    {feedback?.type === "success" ? (
-                      <Alert className="border-emerald-300 bg-emerald-50 text-emerald-950">
-                        <CircleCheck className="text-emerald-600" />
-                        <AlertTitle>Message sent</AlertTitle>
-                        <AlertDescription className="text-emerald-900">
-                          {feedback.message}
-                        </AlertDescription>
-                      </Alert>
-                    ) : null}
-                    {feedback?.type === "error" ? (
-                      <Alert variant="destructive">
-                        <CircleAlert />
-                        <AlertTitle>Could not send</AlertTitle>
-                        <AlertDescription>{feedback.message}</AlertDescription>
-                      </Alert>
-                    ) : null}
-                    <div className="space-y-2">
-                      <Label htmlFor="contact-full-name">Full Name</Label>
-                      <Input
-                        id="contact-full-name"
-                        name="fullName"
-                        autoComplete="name"
-                        required
-                        value={form.fullName}
-                        onChange={(e) => setForm((prev) => ({ ...prev, fullName: e.target.value }))}
-                        placeholder="Your full name"
-                        disabled={sending}
-                      />
-                    </div>
-                    <div className="grid gap-4 sm:grid-cols-2">
-                      <div className="space-y-2">
-                        <Label htmlFor="contact-email">Email Address</Label>
-                        <Input
-                          id="contact-email"
-                          name="email"
-                          type="email"
-                          autoComplete="email"
-                          required
-                          value={form.email}
-                          onChange={(e) => setForm((prev) => ({ ...prev, email: e.target.value }))}
-                          placeholder="you@email.com"
-                          disabled={sending}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="contact-phone">Phone Number</Label>
-                        <Input
-                          id="contact-phone"
-                          name="phone"
-                          type="tel"
-                          autoComplete="tel"
-                          required
-                          value={form.phone}
-                          onChange={(e) => setForm((prev) => ({ ...prev, phone: e.target.value }))}
-                          placeholder="(825) 000-0000"
-                          disabled={sending}
-                        />
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="contact-message">Message</Label>
-                      <Textarea
-                        id="contact-message"
-                        name="message"
-                        required
-                        rows={6}
-                        value={form.message}
-                        onChange={(e) => setForm((prev) => ({ ...prev, message: e.target.value }))}
-                        placeholder="How can we help?"
-                        disabled={sending}
-                        className="min-h-32"
-                      />
-                    </div>
-                    <Button type="submit" className="w-full sm:w-auto" disabled={sending}>
-                      {sending ? (
-                        <>
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                          Sending…
-                        </>
-                      ) : (
-                        <>
-                          <Send className="h-4 w-4" />
-                          Send Message
-                        </>
-                      )}
-                    </Button>
-                  </form>
+                  <ContactForm />
                 </CardContent>
               </Card>
             </motion.div>

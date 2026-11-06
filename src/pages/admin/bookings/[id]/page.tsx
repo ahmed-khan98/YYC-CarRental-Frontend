@@ -21,11 +21,13 @@ import {
   AdminCheckInOutActions,
 } from "@/components/check-in-out.tsx";
 import { isExtraDriverService } from "@/lib/extraDriver.ts";
+import { isUnlimitedMileageService } from "@/lib/unlimitedMileage.ts";
 import { bookingVehicle, formatDisplayName } from "@/lib/displayName.ts";
 import { carPrimaryImage } from "@/lib/mediaUrl.ts";
 import { Badge } from "@/components/ui/badge.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import {
+  AllowedKmInfoRow,
   BookingDetailCard,
   BookingDetailCardContent,
   BookingDetailCardHeader,
@@ -118,17 +120,17 @@ export default function AdminBookingDetailPage() {
     checkInPerformedBy,
     checkOutPerformedBy,
     billEntries = [],
-    billSummary,
     securityDeposit,
   } = detail;
   const inspections = detail.inspections ?? booking.inspections ?? [];
-  const resolvedBillSummary = billSummary ?? computeBillSummary(billEntries);
+  const resolvedBillSummary = computeBillSummary(billEntries);
   const car = detailCar ?? bookingVehicle(booking);
 
   const carImg = carPrimaryImage(car, car ? CAR_IMAGES[car.category] : "");
   const checkIn = pickLatestInspection(inspections, "check_in");
   const checkOut = pickLatestInspection(inspections, "check_out");
   const hasExtraDriver = services.some(isExtraDriverService);
+  const hasUnlimitedMileage = services.some(isUnlimitedMileageService);
   const extraDriverNames = booking.extraDriverNames ?? [];
 
   return (
@@ -152,7 +154,7 @@ export default function AdminBookingDetailPage() {
           </span>
         </div>
         <div className="flex items-center gap-2 sm:ml-auto shrink-0">
-          {booking.status !== "cancelled" && (
+          {booking.status !== "cancelled" && booking.status !== "completed" && (
             <Button
               variant="outline"
               size="sm"
@@ -294,6 +296,14 @@ export default function AdminBookingDetailPage() {
                 }
               />
               <InfoRow label="Duration" value={formatRentalDays(days)} />
+              <AllowedKmInfoRow
+                dailyMileageLimit={
+                  hasUnlimitedMileage
+                    ? null
+                    : car?.dailyMileageLimit ?? booking.bookedDailyMileageLimit
+                }
+                rentalDays={days}
+              />
               {booking.notes && (
                 <InfoRow label="Notes" value={<span className="text-muted-foreground">{booking.notes}</span>} />
               )}
@@ -389,6 +399,9 @@ export default function AdminBookingDetailPage() {
                 booking={booking}
                 checkInPerformedBy={checkInPerformedBy}
                 checkOutPerformedBy={checkOutPerformedBy}
+                dailyMileageLimit={car?.dailyMileageLimit ?? booking.bookedDailyMileageLimit}
+                rentalDays={days}
+                checkInMileage={checkIn?.mileage ?? booking.checkInMileage}
               />
             </BookingDetailCardContent>
           </BookingDetailCard>

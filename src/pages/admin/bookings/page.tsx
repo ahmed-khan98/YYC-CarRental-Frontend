@@ -1,11 +1,10 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { keepPreviousData, useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { bookingsApi } from "@/api/bookings.api.ts";
 import { AdminEditBookingDialog } from "@/components/admin-edit-booking-dialog.tsx";
 import type { Booking } from "@/types/index.ts";
 import { Button } from "@/components/ui/button.tsx";
-import { Badge } from "@/components/ui/badge.tsx";
 import { BookingsTableSkeleton } from "@/components/page-skeleton.tsx";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select.tsx";
 import { Input } from "@/components/ui/input.tsx";
@@ -13,21 +12,12 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import {
   Table,
   TableBody,
-  TableCell,
   TableHead,
   TableHeader,
   TableRow,
 } from "@/components/ui/table.tsx";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu.tsx";
 import { toast } from "sonner";
 import { getApiErrorMessage } from "@/api/client.ts";
-import { BookingDropoffCell, BookingPickupCell } from "@/components/booking-schedule-cell.tsx";
 import { formatMoney } from "@/lib/rentalPricing.ts";
 import {
   isCancelledWithBalanceDue,
@@ -39,179 +29,27 @@ import {
   Plus,
   Search,
   ArrowUpDown,
-  MoreVertical,
-  Eye,
-  Pencil,
-  Trash2,
 } from "lucide-react";
 import { Hint } from "@/components/ui/tooltip.tsx";
-import { bookingVehicle, formatCarName, formatDisplayName } from "@/lib/displayName.ts";
 import { useAuth } from "@/hooks/use-auth.ts";
 import { canDeleteRecords } from "@/lib/roles.ts";
 import { ADMIN_LIST_LIMIT, listItems, listMeta } from "@/lib/pagination.ts";
 import { AdminListPagination } from "@/components/admin-list-pagination.tsx";
 import { cn } from "@/lib/utils.ts";
-
-type DatePreset = "today" | "week" | "month" | "custom";
-
-const DATE_PRESETS: { value: DatePreset; label: string }[] = [
-  { value: "today", label: "Today" },
-  { value: "week", label: "Week" },
-  { value: "month", label: "Month" },
-  { value: "custom", label: "Custom" },
-];
-
-function formatInputDate(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
-
-function rangeForPreset(preset: Exclude<DatePreset, "custom">): { start: string; end: string } {
-  const now = new Date();
-  if (preset === "today") {
-    const key = formatInputDate(now);
-    return { start: key, end: key };
-  }
-  if (preset === "week") {
-    const start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - now.getDay());
-    const end = new Date(start);
-    end.setDate(start.getDate() + 6);
-    return { start: formatInputDate(start), end: formatInputDate(end) };
-  }
-  const start = new Date(now.getFullYear(), now.getMonth(), 1);
-  const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-  return { start: formatInputDate(start), end: formatInputDate(end) };
-}
-
-function pickupDateKey(value: string): string {
-  const raw = String(value ?? "");
-  const match = raw.match(/^(\d{4}-\d{2}-\d{2})/);
-  if (match) return match[1];
-  const d = new Date(raw);
-  if (Number.isNaN(d.getTime())) return "";
-  return formatInputDate(d);
-}
-
-function orderedDateRange(start: string, end: string): { from: string; to: string } {
-  if (start && end && start > end) return { from: end, to: start };
-  return { from: start, to: end };
-}
-
-const STATUS_OPTIONS = ["pending", "confirmed", "checked_in", "checked_out", "completed", "cancelled"] as const;
-const PAYMENT_OPTIONS = ["pending", "paid", "refunded"] as const;
-const STATUS_ORDER: Record<string, number> = {
-  pending: 0,
-  confirmed: 1,
-  checked_in: 2,
-  checked_out: 3,
-  completed: 4,
-  cancelled: 5,
-};
-const STATUS_COLORS: Record<string, string> = {
-  pending: "bg-yellow-500/20 text-yellow-400 border-yellow-500/30",
-  confirmed: "bg-primary/20 text-primary border-primary/30",
-  checked_in: "bg-blue-500/20 text-blue-400 border-blue-500/30",
-  checked_out: "bg-purple-500/20 text-purple-400 border-purple-500/30",
-  completed: "bg-green-500/20 text-green-400 border-green-500/30",
-  cancelled: "bg-red-500/20 text-red-400 border-red-500/30",
-};
-const PAYMENT_COLORS: Record<string, string> = {
-  pending: "bg-yellow-500/15 text-yellow-500 border-yellow-500/25",
-  paid: "bg-green-500/15 text-green-500 border-green-500/25",
-  refunded: "bg-muted text-muted-foreground border-border",
-};
-
-type SortField = "pickupDate" | "status" | "created";
-type SortDir = "asc" | "desc";
-
-const AdminBookingRow = memo(function AdminBookingRow({
-  booking,
-  canDelete,
-  onView,
-  onEdit,
-  onCancel,
-}: {
-  booking: Booking;
-  canDelete: boolean;
-  onView: (bookingId: string) => void;
-  onEdit: (booking: Booking) => void;
-  onCancel: (booking: Booking) => void;
-}) {
-  const customer = booking.user;
-  const car = bookingVehicle(booking);
-  return (
-    <TableRow
-      className="cursor-pointer"
-      onClick={() => onView(booking._id)}
-    >
-      <TableCell className="font-mono text-[10px]">#{booking._id.slice(-8).toUpperCase()}</TableCell>
-      <TableCell className="hidden sm:table-cell">
-        <div className="text-xs font-medium truncate max-w-[140px]">{formatDisplayName(customer?.name)}</div>
-        <div className="text-[10px] text-muted-foreground truncate max-w-[140px]">{customer?.email ?? ""}</div>
-      </TableCell>
-      <TableCell className="hidden md:table-cell text-xs">
-        {formatCarName(car, { includeYear: false })}
-      </TableCell>
-      <TableCell className="whitespace-normal">
-        <BookingPickupCell
-          booking={booking}
-          locationName={booking.pickupLocation?.name}
-          compact
-        />
-      </TableCell>
-      <TableCell className="hidden lg:table-cell whitespace-normal">
-        <BookingDropoffCell
-          booking={booking}
-          locationName={booking.dropoffLocation?.name}
-          compact
-        />
-      </TableCell>
-      <TableCell>
-        <Badge className={`text-[10px] border capitalize ${STATUS_COLORS[booking.status] ?? ""}`}>
-          {booking.status.replace(/_/g, " ")}
-        </Badge>
-      </TableCell>
-      <TableCell className="hidden md:table-cell">
-        <Badge variant="outline" className={`text-[10px] capitalize ${PAYMENT_COLORS[booking.paymentStatus ?? "pending"] ?? ""}`}>
-          {booking.paymentStatus ?? "pending"}
-        </Badge>
-      </TableCell>
-      <TableCell className="font-semibold text-primary text-[13px]">${booking.totalAmount}</TableCell>
-      <TableCell className="w-px px-1 text-center" onClick={(e) => e.stopPropagation()}>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="h-8 w-8 cursor-pointer">
-              <MoreVertical className="h-4 w-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-48">
-            <DropdownMenuItem className="cursor-pointer" onClick={() => onView(booking._id)}>
-              <Eye className="h-4 w-4 mr-2" /> View
-            </DropdownMenuItem>
-            {booking.status !== "completed" && booking.status !== "cancelled" && (
-              <DropdownMenuItem className="cursor-pointer" onClick={() => onEdit(booking)}>
-                <Pencil className="h-4 w-4 mr-2" /> Edit
-              </DropdownMenuItem>
-            )}
-            {canDelete && booking.status !== "cancelled" && booking.status !== "completed" && (
-              <>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  className="cursor-pointer text-destructive focus:text-destructive"
-                  onClick={() => onCancel(booking)}
-                >
-                  <Trash2 className="h-4 w-4 mr-2" /> Delete / Cancel
-                </DropdownMenuItem>
-              </>
-            )}
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </TableCell>
-    </TableRow>
-  );
-});
+import {
+  DATE_PRESETS,
+  type DatePreset,
+  orderedDateRange,
+  rangeForPreset,
+} from "./bookingDateRange.ts";
+import {
+  PAYMENT_OPTIONS,
+  STATUS_OPTIONS,
+  filterAndSortAdminBookings,
+  type AdminBookingSortDir,
+  type AdminBookingSortField,
+} from "./bookingListFilters.ts";
+import { AdminBookingRow } from "./AdminBookingRow.tsx";
 
 export default function AdminBookingsPage() {
   const queryClient = useQueryClient();
@@ -286,8 +124,8 @@ export default function AdminBookingsPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [paymentFilter, setPaymentFilter] = useState("all");
-  const [sortField, setSortField] = useState<SortField>("pickupDate");
-  const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const [sortField, setSortField] = useState<AdminBookingSortField>("pickupDate");
+  const [sortDir, setSortDir] = useState<AdminBookingSortDir>("desc");
 
   const [editBooking, setEditBooking] = useState<Booking | null>(null);
   const [cancelOpen, setCancelOpen] = useState(false);
@@ -305,35 +143,15 @@ export default function AdminBookingsPage() {
   );
 
   const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return (bookings ?? [])
-      .filter((b) => {
-        if (statusFilter !== "all" && b.status !== statusFilter) return false;
-        if (paymentFilter !== "all" && (b.paymentStatus ?? "pending") !== paymentFilter) return false;
-        const pickupKey = pickupDateKey(b.pickupDate);
-        if (pickupRange.from && pickupKey && pickupKey < pickupRange.from) return false;
-        if (pickupRange.to && pickupKey && pickupKey > pickupRange.to) return false;
-        if (q) {
-          const name = b.user?.name?.toLowerCase() ?? "";
-          const email = b.user?.email?.toLowerCase() ?? "";
-          const idMatch =
-            b._id.toLowerCase().includes(q) ||
-            b._id.slice(-8).toLowerCase().includes(q);
-          if (!idMatch && !name.includes(q) && !email.includes(q)) return false;
-        }
-        return true;
-      })
-      .sort((a, b) => {
-        let cmp = 0;
-        if (sortField === "pickupDate") {
-          cmp = new Date(a.pickupDate).getTime() - new Date(b.pickupDate).getTime();
-        } else if (sortField === "status") {
-          cmp = (STATUS_ORDER[a.status] ?? 99) - (STATUS_ORDER[b.status] ?? 99);
-        } else {
-          cmp = a._creationTime - b._creationTime;
-        }
-        return sortDir === "asc" ? cmp : -cmp;
-      });
+    return filterAndSortAdminBookings(bookings, {
+      search,
+      statusFilter,
+      paymentFilter,
+      pickupFrom: pickupRange.from,
+      pickupTo: pickupRange.to,
+      sortField,
+      sortDir,
+    });
   }, [bookings, statusFilter, paymentFilter, pickupRange.from, pickupRange.to, search, sortField, sortDir]);
 
   const paginated = filtered;
@@ -352,7 +170,7 @@ export default function AdminBookingsPage() {
     setCancelOpen(true);
   }, []);
 
-  const toggleSort = (field: SortField) => {
+  const toggleSort = (field: AdminBookingSortField) => {
     if (sortField === field) {
       setSortDir((d) => (d === "asc" ? "desc" : "asc"));
     } else {

@@ -1,7 +1,10 @@
-import { memo, useCallback, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { carsApi } from "@/api/cars.api.ts";
+import { getApiErrorMessage } from "@/api/client.ts";
+import type { Car as FleetCar } from "@/types/index.ts";
+import { listItems } from "@/lib/pagination.ts";
 import Navbar from "@/components/navbar.tsx";
 import Footer from "@/components/footer.tsx";
 import { Button } from "@/components/ui/button.tsx";
@@ -12,7 +15,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { DatePicker } from "@/components/date-picker.tsx";
 import { Slider } from "@/components/ui/slider.tsx";
 import { Users, Fuel, Gauge, SlidersHorizontal, X, Car } from "lucide-react";
-import { format } from "date-fns";
 import {
   formatVehicleCategoryLabel,
   isCustomerVisibleVehicle,
@@ -22,6 +24,8 @@ import {
 } from "@/lib/vehicleCategories.ts";
 import { cn } from "@/lib/utils.ts";
 import { carPrimaryImage, resolveMediaUrl } from "@/lib/mediaUrl.ts";
+import { todayYmd } from "@/lib/bookingWindow.ts";
+import { toast } from "sonner";
 
 const CATEGORIES = VEHICLE_TYPE_FILTER_OPTIONS;
 const TRANSMISSIONS = ["all", "automatic", "manual"] as const;
@@ -37,8 +41,7 @@ const CAR_IMAGES: Record<string, string> = {
   // van: "https://images.unsplash.com/photo-1701918190763-3851cf361f96?w=600&q=80",
 };
 
-const today = format(new Date(), "yyyy-MM-dd");
-const tomorrow = format(new Date(Date.now() + 86400000), "yyyy-MM-dd");
+const today = todayYmd();
 
 const browseDateFieldClass =
   "h-9 min-h-9 rounded-md border border-border/70 bg-background px-2.5 text-[13px] shadow-none transition-colors hover:bg-muted/40 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50";
@@ -119,7 +122,7 @@ const CarListingCard = memo(function CarListingCard({
   onOpen,
   onBook,
 }: {
-  car: NonNullable<Awaited<ReturnType<typeof carsApi.list>>>[number];
+  car: FleetCar;
   onOpen: (carId: string) => void;
   onBook: () => void;
 }) {
@@ -206,7 +209,7 @@ export default function CarsPage() {
 
   const hasDateFilter = Boolean(pickupDate && dropoffDate);
 
-  const { data: carsRaw, isLoading: carsLoading } = useQuery({
+  const { data: carsRaw, isLoading: carsLoading, error: carsError } = useQuery({
     queryKey: hasDateFilter
       ? ["cars", "available", pickupDate, pickupTime, dropoffDate, dropoffTime]
       : ["cars"],
@@ -219,9 +222,15 @@ export default function CarsPage() {
             returnTime: dropoffTime,
           })
         : carsApi.list(),
+    retry: false,
   });
 
-  const filtered = useMemo(() => (carsRaw ?? []).filter((car) => {
+  useEffect(() => {
+    if (carsError) toast.error(getApiErrorMessage(carsError));
+  }, [carsError]);
+
+  const cars = listItems(carsRaw);
+  const filtered = useMemo(() => cars.filter((car) => {
     if (!isCustomerVisibleVehicle(car.category)) return false;
     if (category !== "all" && car.category !== category) return false;
     if (transmission !== "all" && car.transmission !== transmission) return false;
@@ -232,9 +241,9 @@ export default function CarsPage() {
     if (sortBy === "price_asc") return a.dailyRate - b.dailyRate;
     if (sortBy === "price_desc") return b.dailyRate - a.dailyRate;
     return 0;
-  }), [carsRaw, category, transmission, fuelType, maxPrice, sortBy]);
+  }), [cars, category, transmission, fuelType, maxPrice, sortBy]);
 
-  const clearDates = () => {
+  const clearDates = useCallback(() => {
     setPickupDate("");
     setDropoffDate("");
     setSearchParams((prev) => {
@@ -245,15 +254,35 @@ export default function CarsPage() {
       next.delete("dropoffTime");
       return next;
     }, { replace: true });
-  };
+  }, [setSearchParams]);
 
-  const clearFilters = () => {
+  const clearFilters = useCallback(() => {
     setCategory("all");
     setTransmission("all");
     setFuelType("all");
     setMaxPrice([500]);
     setSortBy("default");
-  };
+  }, []);
+
+  const handlePickupDateChange = useCallback((date: string) => {
+    setPickupDate(date);
+    if (dropoffDate && dropoffDate < date) setDropoffDate(date);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set("pickupDate", date);
+      if (dropoffDate && dropoffDate < date) next.set("dropoffDate", date);
+      return next;
+    }, { replace: true });
+  }, [dropoffDate, setSearchParams]);
+
+  const handleDropoffDateChange = useCallback((date: string) => {
+    setDropoffDate(date);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set("dropoffDate", date);
+      return next;
+    }, { replace: true });
+  }, [setSearchParams]);
 
   const hasPanelFilters = transmission !== "all" || fuelType !== "all" || maxPrice[0] < 500;
   const hasFilters = hasPanelFilters || category !== "all" || sortBy !== "default";
@@ -316,16 +345,7 @@ export default function CarsPage() {
                 minDate={today}
                 label="Pick up"
                 selectedHint="Pick up"
-                onChange={(date) => {
-                  setPickupDate(date);
-                  if (dropoffDate && dropoffDate < date) setDropoffDate(date);
-                  setSearchParams((prev) => {
-                    const next = new URLSearchParams(prev);
-                    next.set("pickupDate", date);
-                    if (dropoffDate && dropoffDate < date) next.set("dropoffDate", date);
-                    return next;
-                  }, { replace: true });
-                }}
+                onChange={handlePickupDateChange}
                 className="min-w-0 flex-1 sm:w-40 sm:flex-none"
                 triggerClassName={browseDateFieldClass}
                 align="start"
@@ -336,14 +356,7 @@ export default function CarsPage() {
                 minDate={pickupDate || today}
                 label="Drop-off"
                 selectedHint="Drop-off"
-                onChange={(date) => {
-                  setDropoffDate(date);
-                  setSearchParams((prev) => {
-                    const next = new URLSearchParams(prev);
-                    next.set("dropoffDate", date);
-                    return next;
-                  }, { replace: true });
-                }}
+                onChange={handleDropoffDateChange}
                 className="min-w-0 flex-1 sm:w-40 sm:flex-none"
                 triggerClassName={browseDateFieldClass}
                 align="start"

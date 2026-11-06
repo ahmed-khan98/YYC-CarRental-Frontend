@@ -6,10 +6,12 @@ import { cn } from "@/lib/utils.ts";
 
 export function SignedCheckInPdfLink({
   inspectionId,
+  signedPdfUrl,
   className,
   children,
 }: {
   inspectionId: string;
+  signedPdfUrl?: string | null;
   className?: string;
   children?: ReactNode;
 }) {
@@ -19,7 +21,7 @@ export function SignedCheckInPdfLink({
     if (loading) return;
     setLoading(true);
     try {
-      await inspectionsApi.openSignedPdf(inspectionId);
+      await inspectionsApi.openSignedPdf(inspectionId, signedPdfUrl);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to open agreement PDF");
     } finally {

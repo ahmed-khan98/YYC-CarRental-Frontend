@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from "react";
 import type { BillEntry, BillSummary } from "@/types/index.ts";
 import { formatMoney } from "@/lib/billing.ts";
+import { extraMileageLabel } from "@/lib/extraMileage.ts";
 import { BookingActorValue } from "@/components/booking-actor-value.tsx";
 import { actorFromBillEntry } from "@/lib/bookingActor.ts";
 import { BillEntryStatusBadge } from "@/components/bill-entry-status-badge.tsx";
@@ -12,13 +13,13 @@ import {
 import { cn } from "@/lib/utils.ts";
 import { ChevronDown, CreditCard, FileText, Package, Receipt, Tags } from "lucide-react";
 
-function formatUnitRate(amount: number) {
-  if (Number.isInteger(amount)) return String(amount);
-  return amount.toFixed(2).replace(/\.?0+$/, "");
-}
-
-function extraMileageLabel(km: number, chargePerKm: number) {
-  return `Extra Mileage (${km} × $${formatUnitRate(chargePerKm)})`;
+function PaymentLine({ title, amount }: { title: string; amount: string }) {
+  return (
+    <div className="flex items-center justify-between gap-2 border-b border-border/15 py-2.5 text-sm last:border-0">
+      <span className="min-w-0 truncate text-muted-foreground">{title}</span>
+      <span className="shrink-0 font-medium tabular-nums text-foreground">{amount}</span>
+    </div>
+  );
 }
 
 function ChargeRow({
@@ -351,28 +352,18 @@ export function BookingBillPanel({
               <CollapsibleContent className="border-t border-border/20">
                 <div className="px-3 py-1">
                   {paidPayments.map((entry) => (
-                    <div
+                    <PaymentLine
                       key={entry._id}
-                      className="flex items-center justify-between gap-2 border-b border-border/15 py-2.5 text-sm last:border-0"
-                    >
-                      <span className="min-w-0 truncate text-muted-foreground">{entry.title}</span>
-                      <span className="shrink-0 font-medium tabular-nums text-foreground">
-                        −{formatMoney(entry.amount)}
-                      </span>
-                    </div>
+                      title={entry.title}
+                      amount={`−${formatMoney(entry.amount)}`}
+                    />
                   ))}
                   {refundPayments.map((entry) => (
-                    <div
+                    <PaymentLine
                       key={entry._id}
-                      className="flex items-center justify-between gap-2 border-b border-border/15 py-2.5 text-sm last:border-0"
-                    >
-                      <span className="min-w-0 truncate text-muted-foreground">
-                        {entry.title} (refund)
-                      </span>
-                      <span className="shrink-0 font-medium tabular-nums text-foreground">
-                        +{formatMoney(entry.amount)}
-                      </span>
-                    </div>
+                      title={`${entry.title} (refund)`}
+                      amount={`+${formatMoney(entry.amount)}`}
+                    />
                   ))}
                 </div>
               </CollapsibleContent>

@@ -5,9 +5,11 @@ import type { BillEntry, BillEntryStatus, BillPaidVia, SecurityDepositSummary } 
 import {
   formatMoney,
   getBillEntryTotals,
+  hasCheckOutPayment,
   resolveEntryPhase,
   BILL_ENTRY_STATUS_LABELS,
 } from "@/lib/billing.ts";
+import { isExtraMileageCharge } from "@/lib/extraMileage.ts";
 import { Button } from "@/components/ui/button.tsx";
 import { Input } from "@/components/ui/input.tsx";
 import { Label } from "@/components/ui/label.tsx";
@@ -50,6 +52,7 @@ import { UploadProgressStatus } from "@/components/upload-progress.tsx";
 import { Hint } from "@/components/ui/tooltip.tsx";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group.tsx";
 import { cn } from "@/lib/utils.ts";
+import { resolvePreAuthorizedAmount } from "@/config/appConfig.ts";
 import {
   BILL_PAID_VIA_LABELS,
   canPayFromDeposit,
@@ -75,28 +78,13 @@ type DeleteTarget = {
   type: "charge" | "payment";
 };
 
-function isExtraMileageCharge(entry: BillEntry) {
-  return (
-    entry.entryType === "charge" &&
-    (entry.systemKey === "extra_mileage" || /extra\s*mileage|excess\s*km/i.test(entry.title ?? ""))
-  );
-}
-
-function hasCheckOutPayment(entries: BillEntry[]) {
-  return entries.some(
-    (entry) =>
-      entry.entryType === "payment" &&
-      entry.status !== "refund" &&
-      /check[\s-]?out/i.test(entry.title ?? ""),
-  );
-}
-
 function PaymentMethodFields({
   value,
   onChange,
   remaining,
   depositEnabled,
   amountDue,
+  depositAmount,
   variant = "collect",
 }: {
   value: BillPaidVia;
@@ -104,10 +92,12 @@ function PaymentMethodFields({
   remaining: number;
   depositEnabled: boolean;
   amountDue: number;
+  depositAmount?: number;
   variant?: "create" | "collect";
 }) {
   const depositExceeds = depositEnabled && amountDue - remaining > 0.001;
   const isCreate = variant === "create";
+  const holdLabel = formatMoney(resolvePreAuthorizedAmount(depositAmount));
 
   return (
     <div className="space-y-2">
@@ -139,8 +129,8 @@ function PaymentMethodFields({
             <p className="text-sm font-medium">{isCreate ? "Pre-authorized" : "From Deposit"}</p>
             <p className="text-[11px] text-muted-foreground">
               {isCreate
-                ? `Charge tax-inclusive total from the $800 security deposit · remaining ${formatMoney(remaining)}`
-                : `Deduct from the $800 hold · remaining ${formatMoney(remaining)}`}
+                ? `Charge tax-inclusive total from the ${holdLabel} security deposit · remaining ${formatMoney(remaining)}`
+                : `Deduct from the ${holdLabel} hold · remaining ${formatMoney(remaining)}`}
             </p>
             {depositExceeds && (
               <p className="text-[11px] text-destructive mt-0.5">
@@ -472,7 +462,6 @@ export function AdminManualChargesPanel({
                         <Input
                           value={editDescription}
                           onChange={(e) => setEditDescription(e.target.value)}
-                          placeholder="Optional details"
                         />
                       </div>
                       <div className="space-y-1.5">
@@ -520,6 +509,7 @@ export function AdminManualChargesPanel({
                             )}
                             depositEnabled={isDepositPaymentEnabled(securityDeposit)}
                             amountDue={getBillEntryTotals(Number(editAmount) || 0).totalAmount}
+                            depositAmount={securityDeposit?.amount}
                           />
                         </div>
                       )}
@@ -705,7 +695,6 @@ export function AdminManualChargesPanel({
                 <Input
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
-                  placeholder="e.g. Traffic Violation"
                 />
               </div>
               <div className="space-y-1.5 sm:col-span-2">
@@ -713,7 +702,6 @@ export function AdminManualChargesPanel({
                 <Textarea
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Optional details — this is emailed to the customer"
                   rows={3}
                 />
               </div>
@@ -725,7 +713,6 @@ export function AdminManualChargesPanel({
                   step="0.01"
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
-                  placeholder="0.00"
                 />
                 {amount && Number(amount) > 0 && (
                   <p className="text-[11px] text-muted-foreground">
@@ -763,6 +750,7 @@ export function AdminManualChargesPanel({
                   remaining={remainingDepositForEntry(securityDeposit)}
                   depositEnabled={isDepositPaymentEnabled(securityDeposit)}
                   amountDue={getBillEntryTotals(Number(amount) || 0).totalAmount}
+                  depositAmount={securityDeposit?.amount}
                 />
               </div>
             </div>
@@ -828,6 +816,7 @@ export function AdminManualChargesPanel({
               remaining={remainingDepositForEntry(securityDeposit, payTarget)}
               depositEnabled={isDepositPaymentEnabled(securityDeposit)}
               amountDue={chargeAmountDue(payTarget)}
+              depositAmount={securityDeposit?.amount}
             />
           )}
           <AlertDialogFooter>

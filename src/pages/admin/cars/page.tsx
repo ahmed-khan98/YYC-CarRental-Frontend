@@ -1,9 +1,16 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useCallback, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { carsApi } from "@/api/cars.api.ts";
 import { uploadFile } from "@/api/upload.api.ts";
 import type { Car, CarCategory } from "@/types/index.ts";
+import {
+  EMPTY_FORM,
+  FUEL_TYPE_OPTIONS,
+  validateCarForm,
+  type CarForm,
+  type CarFormErrors,
+} from "@/pages/admin/cars/carForm.ts";
 import { Button } from "@/components/ui/button.tsx";
 import { Input } from "@/components/ui/input.tsx";
 import { Label } from "@/components/ui/label.tsx";
@@ -32,60 +39,6 @@ import {
 
 type Transmission = Car["transmission"];
 type FuelType = Car["fuelType"];
-
-interface CarForm {
-  make: string; model: string; year: string; category: CarCategory;
-  color: string; licensePlate: string; vin: string; dailyRate: string;
-  dailyMileageLimit: string; chargePerExtraKm: string;
-  seats: string; transmission: Transmission; fuelType: FuelType;
-  mileage: string; description: string;
-  features: string;
-}
-
-const EMPTY_FORM: CarForm = {
-  make: "", model: "", year: "", category: "sedan",
-  color: "", licensePlate: "", vin: "", dailyRate: "",
-  dailyMileageLimit: "", chargePerExtraKm: "",
-  seats: "5", transmission: "automatic", fuelType: "gasoline",
-  mileage: "", description: "",
-  features: "",
-};
-
-type CarFormErrors = Partial<Record<keyof CarForm, string>>;
-
-const REQUIRED_TEXT_FIELDS: { key: keyof CarForm; label: string }[] = [
-  { key: "make", label: "Make" },
-  { key: "model", label: "Model" },
-  { key: "color", label: "Color" },
-  { key: "licensePlate", label: "License plate" },
-  { key: "vin", label: "VIN" },
-];
-
-const REQUIRED_NUMBER_FIELDS: { key: keyof CarForm; label: string }[] = [
-  { key: "year", label: "Year" },
-  { key: "dailyRate", label: "Daily rate" },
-  { key: "dailyMileageLimit", label: "Daily mileage limit" },
-  { key: "chargePerExtraKm", label: "Charge per extra km" },
-  { key: "seats", label: "Seats" },
-  { key: "mileage", label: "Mileage" },
-];
-
-function validateCarForm(form: CarForm): { errors: CarFormErrors; firstMessage: string | null } {
-  const errors: CarFormErrors = {};
-  for (const { key, label } of REQUIRED_TEXT_FIELDS) {
-    if (!String(form[key] ?? "").trim()) errors[key] = `${label} is required`;
-  }
-  if (!form.category) errors.category = "Category is required";
-  if (!form.transmission) errors.transmission = "Transmission is required";
-  if (!form.fuelType) errors.fuelType = "Fuel type is required";
-  for (const { key, label } of REQUIRED_NUMBER_FIELDS) {
-    const raw = String(form[key] ?? "").trim();
-    if (!raw) errors[key] = `${label} is required`;
-    else if (!Number.isFinite(Number(raw))) errors[key] = `${label} must be a valid number`;
-    else if (Number(raw) < 0) errors[key] = `${label} cannot be negative`;
-  }
-  return { errors, firstMessage: Object.values(errors)[0] ?? null };
-}
 
 function FieldError({ message }: { message?: string }) {
   if (!message) return null;
@@ -146,13 +99,13 @@ export default function AdminCarsPage() {
   const mainImageRef = useRef<HTMLInputElement>(null);
   const additionalImagesRef = useRef<HTMLInputElement>(null);
 
-  const filtered = (cars ?? []).filter((c) => {
+  const filtered = useMemo(() => (cars ?? []).filter((c) => {
     const matchesSearch = `${c.make} ${c.model} ${c.licensePlate}`
       .toLowerCase()
       .includes(search.toLowerCase());
     const matchesCategory = categoryFilter === "all" || c.category === categoryFilter;
     return matchesSearch && matchesCategory;
-  });
+  }), [cars, search, categoryFilter]);
 
   const resetImageState = () => {
     setMainImage(null);
@@ -172,7 +125,7 @@ export default function AdminCarsPage() {
     setOpen(true);
   };
 
-  const openEdit = (car: Car) => {
+  const openEdit = useCallback((car: Car) => {
     if (!car) return;
     setForm({
       make: car.make, model: car.model, year: String(car.year), category: car.category,
@@ -193,7 +146,7 @@ export default function AdminCarsPage() {
     setAdditionalPreviews(previews.slice(1));
     setEditId(car._id);
     setOpen(true);
-  };
+  }, []);
 
   const handleMainImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -293,10 +246,10 @@ export default function AdminCarsPage() {
     }
   };
 
-  const handleToggleAvailable = async (carId: string, current: boolean) => {
+  const handleToggleAvailable = useCallback(async (carId: string, current: boolean) => {
     await updateCar.mutateAsync({ carId, data: { isAvailable: !current } });
     toast.success(`Car ${!current ? "enabled" : "disabled"}`);
-  };
+  }, [updateCar]);
 
   const clearFieldError = (k: keyof CarForm) =>
     setFieldErrors((p) => (p[k] ? { ...p, [k]: undefined } : p));
@@ -306,7 +259,7 @@ export default function AdminCarsPage() {
     clearFieldError(k);
   };
 
-  const carColumns: AdminTableColumn<Car>[] = [
+  const carColumns: AdminTableColumn<Car>[] = useMemo(() => [
     {
       id: "vehicle",
       header: "Vehicle",
@@ -401,7 +354,7 @@ export default function AdminCarsPage() {
         </div>
       ),
     },
-  ];
+  ], [canDelete, handleToggleAvailable, navigate, openEdit]);
 
   return (
     <div className="p-6 space-y-5">
@@ -561,7 +514,7 @@ export default function AdminCarsPage() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {(["gasoline","diesel","electric","hybrid"] as const).map((ft) => (
+                  {FUEL_TYPE_OPTIONS.map((ft) => (
                     <SelectItem key={ft} value={ft} className="capitalize">{ft}</SelectItem>
                   ))}
                 </SelectContent>

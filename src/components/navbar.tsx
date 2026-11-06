@@ -16,17 +16,17 @@ import {
 } from "@/components/ui/dropdown-menu.tsx";
 import { BrandLogo } from "@/components/brand-logo.tsx";
 
+const NAV_LINKS = [
+  { href: "/cars", label: "Browse Cars" },
+  { href: "/about", label: "About" },
+  { href: "/faq", label: "FAQ" },
+  { href: "/contact", label: "Contact" },
+] as const;
+
 function Navbar() {
   const [open, setOpen] = useState(false);
   const { pathname } = useLocation();
   const { user, logout } = useAuth();
-
-  const links = [
-    { href: "/cars", label: "Browse Cars" },
-    { href: "/about", label: "About" },
-    { href: "/faq", label: "FAQ" },
-    { href: "/contact", label: "Contact" },
-  ];
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 border-b border-border bg-background/95 backdrop-blur-xl shadow-sm">
@@ -37,7 +37,7 @@ function Navbar() {
           </Link>
 
           <div className="hidden md:flex items-center gap-6">
-            {links.map((link) => (
+            {NAV_LINKS.map((link) => (
               <Link
                 key={link.href}
                 to={link.href}
@@ -99,7 +99,10 @@ function Navbar() {
           </div>
 
           <button
+            type="button"
             className="md:hidden cursor-pointer p-2 text-muted-foreground hover:text-foreground"
+            aria-label={open ? "Close menu" : "Open menu"}
+            aria-expanded={open}
             onClick={() => setOpen(!open)}
           >
             {open ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
@@ -109,7 +112,7 @@ function Navbar() {
 
       {open && (
         <div className="md:hidden border-t border-border bg-background px-4 py-4 space-y-3">
-          {links.map((link) => (
+          {NAV_LINKS.map((link) => (
             <Link
               key={link.href}
               to={link.href}

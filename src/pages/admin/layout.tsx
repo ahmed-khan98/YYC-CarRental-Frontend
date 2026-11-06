@@ -12,7 +12,7 @@ import { useAuth } from "@/hooks/use-auth.ts";
 import { cn } from "@/lib/utils.ts";
 import {
   LayoutDashboard, Car, CalendarCheck, Users, MapPin, Shield, Wrench,
-  ChevronRight, CarFront, UserCog, LogOut,
+  ChevronRight, CarFront, UserCog, LogOut, Settings, User,
 } from "lucide-react";
 
 const NAV_ITEMS = [
@@ -25,7 +25,39 @@ const NAV_ITEMS = [
   { href: "/admin/services", label: "Services", icon: Shield },
   { href: "/admin/maintenance", label: "Maintenance", icon: Wrench },
   { href: "/admin/team", label: "Sub-Admins", icon: UserCog, fullAdminOnly: true },
+  { href: "/admin/config", label: "Config", icon: Settings, fullAdminOnly: true },
+  { href: "/admin/profile", label: "Profile", icon: User },
 ];
+
+function StaffAccount({
+  name,
+  email,
+  role,
+  className,
+}: {
+  name?: string;
+  email?: string;
+  role?: string;
+  className?: string;
+}) {
+  const displayName = formatActorDisplayName(name, role, "");
+  return (
+    <Link
+      to="/admin/profile"
+      aria-label="View profile"
+      className={cn("block min-w-0 rounded-md hover:bg-secondary/80", className)}
+    >
+      {displayName ? (
+        <p className="truncate text-xs font-medium text-foreground">{displayName}</p>
+      ) : null}
+      {email ? (
+        <p className="truncate text-[11px] text-muted-foreground" title={email}>
+          {email}
+        </p>
+      ) : null}
+    </Link>
+  );
+}
 
 function AdminContent() {
   const { pathname } = useLocation();
@@ -77,15 +109,25 @@ function AdminContent() {
     (item) => !item.fullAdminOnly || isFullAdminRole(staffUser.role),
   );
 
-  if (pathname === "/admin/team" && !isFullAdminRole(staffUser.role)) {
+  if (
+    (pathname === "/admin/team" || pathname === "/admin/config") &&
+    !isFullAdminRole(staffUser.role)
+  ) {
+    const isConfig = pathname === "/admin/config";
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <Card className="border-border/50 text-center py-12 px-8 max-w-sm mx-auto">
           <CardContent>
-            <UserCog className="h-12 w-12 text-muted-foreground mx-auto mb-3" />
+            {isConfig ? (
+              <Settings className="h-12 w-12 text-muted-foreground mx-auto mb-3" />
+            ) : (
+              <UserCog className="h-12 w-12 text-muted-foreground mx-auto mb-3" />
+            )}
             <h3 className="text-lg font-semibold mb-2">Full Admin Required</h3>
             <p className="text-muted-foreground text-sm">
-              Only full admins can manage sub-admin accounts.
+              {isConfig
+                ? "Only full admins can manage app config."
+                : "Only full admins can manage sub-admin accounts."}
             </p>
           </CardContent>
         </Card>
@@ -96,13 +138,13 @@ function AdminContent() {
   return (
     <div className="flex min-h-screen w-full">
       <aside className="hidden md:sticky md:top-0 md:h-screen md:flex w-48 flex-col border-r border-border/50 bg-sidebar shrink-0">
-        <div className="space-y-3 border-b border-border/50 px-3 py-3">
-          <Link to="/" className="inline-flex cursor-pointer">
+        <div className="flex items-center gap-2 border-b border-border/50 px-3 pt-2 pb-1">
+          <Link to="/" className="inline-flex shrink-0 cursor-pointer">
             <BrandLogo variant="sidebar" />
           </Link>
           <Badge
             variant="secondary"
-            className="border-primary/20 bg-primary/10 font-mono text-[10px] uppercase tracking-wide text-primary"
+            className="shrink-0 border-primary/20 bg-primary/10 font-mono text-[10px] uppercase tracking-wide text-primary"
           >
             {roleLabel(staffUser.role)}
           </Badge>
@@ -117,7 +159,7 @@ function AdminContent() {
                 key={item.href}
                 to={item.href}
                 className={cn(
-                  "flex items-center gap-2 px-2.5 py-2 rounded-lg text-sm transition-colors cursor-pointer",
+                  "flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs transition-colors cursor-pointer",
                   isActive
                     ? "bg-primary/10 text-primary font-medium"
                     : "text-muted-foreground hover:text-foreground hover:bg-secondary",
@@ -131,9 +173,6 @@ function AdminContent() {
           })}
         </nav>
         <div className="border-t border-border/50 px-2.5 py-3">
-          <div className="mb-2 truncate px-1 text-xs text-muted-foreground">
-            {formatActorDisplayName(staffUser.name, staffUser.role, "")}
-          </div>
           <Button
             variant="ghost"
             size="sm"
@@ -175,9 +214,17 @@ function AdminContent() {
       </nav>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <div className="flex items-center justify-between border-b border-border/50 px-2.5 py-2.5 md:hidden">
-          <div className="flex items-center gap-3">
-            <Link to="/" className="inline-flex cursor-pointer">
+        <div className="hidden md:sticky md:top-0 md:z-20 md:flex items-center justify-end border-b border-border/50 bg-background px-6 py-2">
+          <StaffAccount
+            name={staffUser.name}
+            email={staffUser.email}
+            role={staffUser.role}
+            className="max-w-[16rem] px-1 py-0.5 text-right"
+          />
+        </div>
+        <div className="flex items-center justify-between gap-2 border-b border-border/50 px-2.5 py-2.5 md:hidden">
+          <div className="flex min-w-0 items-center gap-3">
+            <Link to="/" className="inline-flex shrink-0 cursor-pointer">
               <BrandLogo variant="sidebar" className="h-10" />
             </Link>
             <Badge
@@ -187,15 +234,23 @@ function AdminContent() {
               {roleLabel(staffUser.role)}
             </Badge>
           </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleLogout}
-            className="cursor-pointer gap-2 text-destructive hover:bg-destructive/10 hover:text-destructive"
-          >
-            <LogOut className="h-4 w-4" />
-            Logout
-          </Button>
+          <div className="flex min-w-0 items-center gap-2">
+            <StaffAccount
+              name={staffUser.name}
+              email={staffUser.email}
+              role={staffUser.role}
+              className="max-w-[10rem] text-right"
+            />
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleLogout}
+              className="shrink-0 cursor-pointer gap-2 text-destructive hover:bg-destructive/10 hover:text-destructive"
+            >
+              <LogOut className="h-4 w-4" />
+              Logout
+            </Button>
+          </div>
         </div>
 
         <main className="flex-1 pb-16 md:pb-0">

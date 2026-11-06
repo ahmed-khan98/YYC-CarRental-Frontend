@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button.tsx";
 import { Badge } from "@/components/ui/badge.tsx";
 import { Card, CardContent } from "@/components/ui/card.tsx";
 import {
+  AllowedKmInfoRow,
   BookingDetailCard,
   BookingDetailCardContent,
   BookingDetailCardHeader,
@@ -25,6 +26,7 @@ import { CancelledAmountDueBanner } from "@/components/cancelled-amount-due.tsx"
 import { BookingBillPanel } from "@/components/booking-bill-panel.tsx";
 import { calculateServiceCharge, formatServiceRateLabel } from "@/lib/serviceCharge.ts";
 import { isExtraDriverService } from "@/lib/extraDriver.ts";
+import { isUnlimitedMileageService } from "@/lib/unlimitedMileage.ts";
 import { formatTime12h } from "@/lib/timeFormat.ts";
 import { BookingStatusStepper } from "@/components/booking-status-stepper.tsx";
 import { carPrimaryImage } from "@/lib/mediaUrl.ts";
@@ -99,10 +101,9 @@ function BookingDetailInner({ bookingId }: { bookingId: string }) {
     extraMileageCharge = 0,
     extraMileageKm,
     billEntries = [],
-    billSummary,
   } = detail;
   const inspections = detail.inspections ?? booking.inspections ?? [];
-  const resolvedBillSummary = billSummary ?? computeBillSummary(billEntries);
+  const resolvedBillSummary = computeBillSummary(billEntries);
   const car = detailCar ?? bookingVehicle(booking);
 
   const carImg = carPrimaryImage(car, car ? CAR_IMAGES[car.category] : "");
@@ -110,6 +111,7 @@ function BookingDetailInner({ bookingId }: { bookingId: string }) {
   const checkIn = pickLatestInspection(inspections, "check_in");
   const checkOut = pickLatestInspection(inspections, "check_out");
   const hasExtraDriver = services.some(isExtraDriverService);
+  const hasUnlimitedMileage = services.some(isUnlimitedMileageService);
   const extraDriverNames = booking.extraDriverNames ?? [];
 
   return (
@@ -230,6 +232,14 @@ function BookingDetailInner({ bookingId }: { bookingId: string }) {
                 }
               />
               <InfoRow label="Duration" value={formatRentalDays(days)} />
+              <AllowedKmInfoRow
+                dailyMileageLimit={
+                  hasUnlimitedMileage
+                    ? null
+                    : car?.dailyMileageLimit ?? booking.bookedDailyMileageLimit
+                }
+                rentalDays={days}
+              />
               {booking.notes && (
                 <InfoRow label="Notes" value={<span className="text-muted-foreground">{booking.notes}</span>} />
               )}
@@ -318,6 +328,9 @@ function BookingDetailInner({ bookingId }: { bookingId: string }) {
                 checkOut={booking.checkOutVisibleToUser ? checkOut : null}
                 showCheckIn={Boolean(booking.checkInVisibleToUser)}
                 showCheckOut={Boolean(booking.checkOutVisibleToUser)}
+                dailyMileageLimit={car?.dailyMileageLimit ?? booking.bookedDailyMileageLimit}
+                rentalDays={days}
+                checkInMileage={checkIn?.mileage ?? booking.checkInMileage}
               />
             </BookingDetailCardContent>
           </BookingDetailCard>

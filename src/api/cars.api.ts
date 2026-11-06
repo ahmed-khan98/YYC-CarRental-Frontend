@@ -1,20 +1,25 @@
 import { apiClient } from "./client.ts";
 import type { Car, CarCategory } from "@/types/index.ts";
+import { resolveListResult, type ListPageParams, type Paginated } from "@/lib/pagination.ts";
+
+type CarListFilters = {
+  category?: string;
+  locationId?: string;
+  availableOnly?: boolean;
+  includeDeactivated?: boolean;
+};
+
+type CarListParams = CarListFilters & ListPageParams;
 
 export const carsApi = {
-  list: async (params?: {
-    category?: string;
-    locationId?: string;
-    availableOnly?: boolean;
-    includeDeactivated?: boolean;
-  }) => {
-    const res = await apiClient.get<Car[]>("/cars", {
+  list: async (params?: CarListParams): Promise<Car[] | Paginated<Car>> => {
+    const res = await apiClient.get<Car[] | Paginated<Car>>("/cars", {
       params: {
         ...params,
         includeDeactivated: params?.includeDeactivated ? true : undefined,
       },
     });
-    return res.data;
+    return resolveListResult<Car>(res.data, params);
   },
   listAvailable: async (params: {
     pickupDate: string;

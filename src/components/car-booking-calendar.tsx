@@ -9,9 +9,6 @@ import {
   eachDayOfInterval,
   isSameMonth,
   isSameDay,
-  isWithinInterval,
-  parseISO,
-  startOfDay,
   format,
 } from "date-fns";
 import type { CarBookingCalendarItem } from "@/api/bookings.api.ts";
@@ -19,31 +16,11 @@ import { Button } from "@/components/ui/button.tsx";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card.tsx";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils.ts";
-import { formatDateWithTime } from "@/lib/timeFormat.ts";
-
-const STATUS_COLORS: Record<string, string> = {
-  pending: "bg-yellow-500/80 hover:bg-yellow-500",
-  confirmed: "bg-primary/80 hover:bg-primary",
-  checked_in: "bg-blue-500/80 hover:bg-blue-500",
-  checked_out: "bg-purple-500/80 hover:bg-purple-500",
-  completed: "bg-green-600/80 hover:bg-green-600",
-  cancelled: "bg-red-500/60 hover:bg-red-500 line-through opacity-70",
-};
-
-type BarSegment = {
-  booking: CarBookingCalendarItem;
-  startCol: number;
-  endCol: number;
-  isStart: boolean;
-  isEnd: boolean;
-  lane: number;
-};
-
-function formatRentalPeriod(booking: CarBookingCalendarItem) {
-  const pickup = format(parseISO(booking.pickupDate), "MMM d, yyyy");
-  const dropoff = format(parseISO(booking.returnDate), "MMM d, yyyy");
-  return `${formatDateWithTime(pickup, booking.pickupTime)} → ${formatDateWithTime(dropoff, booking.returnTime)}`;
-}
+import {
+  CALENDAR_STATUS_COLORS,
+  formatRentalPeriod,
+  getWeekSegments,
+} from "@/lib/carBookingCalendar.ts";
 
 function BookingTooltipContent({ booking }: { booking: CarBookingCalendarItem }) {
   return (
@@ -58,53 +35,6 @@ function BookingTooltipContent({ booking }: { booking: CarBookingCalendarItem })
       <p className="text-[10px] text-primary-foreground/70 font-mono">#{booking._id.slice(-8).toUpperCase()}</p>
     </div>
   );
-}
-
-function getWeekSegments(weekDays: Date[], bookings: CarBookingCalendarItem[]): BarSegment[] {
-  const raw: Omit<BarSegment, "lane">[] = [];
-
-  for (const booking of bookings) {
-    const pickup = startOfDay(parseISO(booking.pickupDate));
-    const returnDay = startOfDay(parseISO(booking.returnDate));
-
-    let startCol = -1;
-    let endCol = -1;
-
-    weekDays.forEach((day, idx) => {
-      const d = startOfDay(day);
-      if (isWithinInterval(d, { start: pickup, end: returnDay })) {
-        if (startCol === -1) startCol = idx;
-        endCol = idx;
-      }
-    });
-
-    if (startCol !== -1) {
-      raw.push({
-        booking,
-        startCol,
-        endCol,
-        isStart: isSameDay(weekDays[startCol], pickup),
-        isEnd: isSameDay(weekDays[endCol], returnDay),
-      });
-    }
-  }
-
-  const sorted = [...raw].sort((a, b) => a.startCol - b.startCol || a.endCol - b.endCol);
-  const laneEnds: number[] = [];
-  const segments: BarSegment[] = [];
-
-  for (const seg of sorted) {
-    let lane = laneEnds.findIndex((endCol) => endCol < seg.startCol);
-    if (lane === -1) {
-      lane = laneEnds.length;
-      laneEnds.push(seg.endCol);
-    } else {
-      laneEnds[lane] = seg.endCol;
-    }
-    segments.push({ ...seg, lane });
-  }
-
-  return segments;
 }
 
 function CalendarWeekRow({
@@ -152,8 +82,8 @@ function CalendarWeekRow({
       })}
 
       <div
-        className="absolute left-0 right-0 pointer-events-none"
-        style={{ top: 32, height: barAreaHeight }}
+        className="absolute left-0 right-0 top-8 pointer-events-none"
+        style={{ height: barAreaHeight }}
       >
         {segments.map((seg) => (
           <HoverCard key={`${seg.booking._id}-${seg.startCol}-${seg.lane}`} openDelay={150} closeDelay={120}>
@@ -162,7 +92,7 @@ function CalendarWeekRow({
                 type="button"
                 className={cn(
                   "absolute h-5 truncate px-1.5 py-0.5 text-[10px] font-medium text-white text-left cursor-pointer transition-colors pointer-events-auto",
-                  STATUS_COLORS[seg.booking.status] ?? "bg-muted-foreground",
+                  CALENDAR_STATUS_COLORS[seg.booking.status] ?? "bg-muted-foreground",
                   seg.isStart && seg.isEnd && "rounded-md",
                   seg.isStart && !seg.isEnd && "rounded-l-md rounded-r-none",
                   !seg.isStart && seg.isEnd && "rounded-r-md rounded-l-none",
@@ -270,7 +200,7 @@ export function CarBookingCalendar({
       </div>
 
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 pt-1">
-        {Object.entries(STATUS_COLORS).map(([status, colorClass]) => (
+        {Object.entries(CALENDAR_STATUS_COLORS).map(([status, colorClass]) => (
           <span key={status} className="inline-flex items-center gap-1.5 text-[10px] capitalize text-muted-foreground">
             <span className={cn("h-2.5 w-2.5 rounded-sm", colorClass.split(" ")[0])} />
             {status.replace(/_/g, " ")}

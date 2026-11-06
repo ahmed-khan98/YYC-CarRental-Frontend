@@ -25,7 +25,6 @@ export const BookingNotesSection = memo(function BookingNotesSection({
         <textarea
           className="w-full bg-input border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring resize-none"
           rows={3}
-          placeholder="Any special requests or notes..."
           value={notes}
           onChange={(event) => onNotesChange(event.target.value)}
         />

@@ -47,11 +47,11 @@ export function AgreementPdfPreview({
             key={url}
             src={url}
             title={title}
-            className="h-72 w-full bg-white"
+            className="h-96 w-full bg-white sm:h-[32rem]"
           />
         )
       ) : (
-        <div className="flex h-72 items-center justify-center px-4 text-center text-sm text-muted-foreground">
+        <div className="flex h-96 items-center justify-center px-4 text-center text-sm text-muted-foreground sm:h-[32rem]">
           {error ? "Failed to load agreement PDF" : "Loading agreement PDF..."}
         </div>
       )}

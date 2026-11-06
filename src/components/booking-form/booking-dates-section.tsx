@@ -49,7 +49,10 @@ export const BookingDatesSection = memo(function BookingDatesSection({
               minDate={today}
               label="Pick up"
               selectedHint="Pick up"
-              onChange={onPickupDateChange}
+              onChange={(date) => {
+                onPickupDateChange(date);
+                if (returnDate && returnDate < date) onReturnDateChange(date);
+              }}
               align="start"
             />
           </div>

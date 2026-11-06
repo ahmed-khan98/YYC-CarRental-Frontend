@@ -6,9 +6,10 @@ import { Card, CardContent } from "@/components/ui/card.tsx";
 import Navbar from "@/components/navbar.tsx";
 import Footer from "@/components/footer.tsx";
 import { ArrowRight, Search, Star, Shield, Clock, MapPin, Zap, Car, Users, Award, Calendar } from "lucide-react";
-import { useEffect, useRef, useState, type ReactNode } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { memo, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { locationsApi } from "@/api/locations.api.ts";
+import { listItems } from "@/lib/pagination.ts";
 import { useAutoSelectSingleLocation } from "@/hooks/use-auto-select-single-location.ts";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select.tsx";
 import { Label } from "@/components/ui/label.tsx";
@@ -19,6 +20,10 @@ import {
   VEHICLE_TYPE_OPTIONS,
 } from "@/lib/vehicleCategories.ts";
 import { formatTime12h } from "@/lib/timeFormat.ts";
+import { todayYmd } from "@/lib/bookingWindow.ts";
+import { carsApi } from "@/api/cars.api.ts";
+import { getApiErrorMessage } from "@/api/client.ts";
+import { toast } from "sonner";
 
 // Real MP4 hosted in /public — do not hotlink Pexels CDN (403) or use their JPEG "download" URLs
 const HERO_VIDEO = "/hero-video.mp4?v=3";
@@ -119,15 +124,65 @@ const TIME_OPTIONS = [
   "13:00", "14:00", "15:00", "16:00", "17:00", "18:00", "19:00", "20:00", "21:00",
 ];
 
+const FeaturedCarCard = memo(function FeaturedCarCard({
+  car,
+  onOpen,
+}: {
+  car: (typeof FEATURED_CARS)[number];
+  onOpen: () => void;
+}) {
+  return (
+    <Card className="overflow-hidden border-border/50 bg-card/60 hover:border-primary/40 transition-all duration-300 cursor-pointer group"
+      onClick={onOpen}
+    >
+      <div className="relative overflow-hidden h-48">
+        <img
+          src={car.image}
+          alt={car.name}
+          className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+        />
+        <div className="absolute top-3 right-3">
+          <Badge className="bg-background/80 backdrop-blur text-foreground border-0 text-xs">
+            <Star className="h-3 w-3 fill-primary text-primary mr-1" />
+            {car.rating}
+          </Badge>
+        </div>
+      </div>
+      <CardContent className="p-4">
+        <div className="flex items-start justify-between mb-2">
+          <div>
+            <h3 className="font-semibold text-foreground">{car.name}</h3>
+            <p className="text-xs text-muted-foreground">{car.category}</p>
+          </div>
+          <div className="text-right">
+            <span className="text-xl font-bold text-primary">${car.price}</span>
+            <span className="text-xs text-muted-foreground">/day</span>
+          </div>
+        </div>
+        <div className="flex items-center gap-3 text-xs text-muted-foreground">
+          <span>{car.seats} seats</span>
+          <span>•</span>
+          <span>{car.transmission}</span>
+        </div>
+        <Button className="w-full mt-3 h-9 text-sm font-medium cursor-pointer" onClick={onOpen}>
+          Book Now
+        </Button>
+      </CardContent>
+    </Card>
+  );
+});
+
 export default function Index() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const heroVideoRef = useRef<HTMLVideoElement>(null);
-  const { data: locations } = useQuery({
+  const { data: locationsResult } = useQuery({
     queryKey: ["locations", { activeOnly: true }],
     queryFn: () => locationsApi.list(true),
   });
+  const locations = listItems(locationsResult);
 
-  const today = format(new Date(), "yyyy-MM-dd");
+  const today = todayYmd();
   const tomorrow = format(new Date(Date.now() + 86400000), "yyyy-MM-dd");
 
   const [pickupLocation, setPickupLocation] = useState("");
@@ -144,6 +199,7 @@ export default function Index() {
   const [pickupTime, setPickupTime] = useState("10:00");
   const [dropoffDate, setDropoffDate] = useState(tomorrow);
   const [dropoffTime, setDropoffTime] = useState("10:00");
+  const [searching, setSearching] = useState(false);
 
   useEffect(() => {
     const video = heroVideoRef.current;
@@ -164,7 +220,32 @@ export default function Index() {
     return () => video.removeEventListener("loadeddata", playVideo);
   }, []);
 
-  const handleSearch = () => {
+  const handleOpenCars = useCallback(() => {
+    navigate("/cars");
+  }, [navigate]);
+
+  const handleSearch = async () => {
+    if (pickupDate && dropoffDate) {
+      setSearching(true);
+      try {
+        await queryClient.fetchQuery({
+          queryKey: ["cars", "available", pickupDate, pickupTime, dropoffDate, dropoffTime],
+          queryFn: () =>
+            carsApi.listAvailable({
+              pickupDate,
+              returnDate: dropoffDate,
+              pickupTime,
+              returnTime: dropoffTime,
+            }),
+          retry: false,
+        });
+      } catch (err) {
+        toast.error(getApiErrorMessage(err));
+        return;
+      } finally {
+        setSearching(false);
+      }
+    }
     const params = new URLSearchParams();
     if (pickupLocation) params.set("pickupLocation", pickupLocation);
     if (dropoffLocation) params.set("dropoffLocation", dropoffLocation);
@@ -249,7 +330,7 @@ export default function Index() {
                     <SelectContent>
                       {(locations ?? []).map((loc) => (
                         <SelectItem key={loc._id} value={loc._id}>
-                          {loc.name} — {loc.city}
+                          {loc.name}
                         </SelectItem>
                       ))}
                       {(locations ?? []).length === 0 && (
@@ -267,7 +348,7 @@ export default function Index() {
                     <SelectContent>
                       {(locations ?? []).map((loc) => (
                         <SelectItem key={loc._id} value={loc._id}>
-                          {loc.name} — {loc.city}
+                          {loc.name}
                         </SelectItem>
                       ))}
                       {(locations ?? []).length === 0 && (
@@ -352,7 +433,7 @@ export default function Index() {
                     </SelectContent>
                   </Select>
                 </div>
-                <Button onClick={handleSearch} className={heroSearchButtonClass}>
+                <Button onClick={handleSearch} disabled={searching} className={heroSearchButtonClass}>
                   Search <Search className="ml-1.5 h-4 w-4" />
                 </Button>
               </div>
@@ -434,43 +515,7 @@ export default function Index() {
               transition={{ delay: i * 0.15, duration: 0.5 }}
               whileHover={{ y: -4 }}
             >
-              <Card className="overflow-hidden border-border/50 bg-card/60 hover:border-primary/40 transition-all duration-300 cursor-pointer group"
-                onClick={() => navigate("/cars")}
-              >
-                <div className="relative overflow-hidden h-48">
-                  <img
-                    src={car.image}
-                    alt={car.name}
-                    className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                  />
-                  <div className="absolute top-3 right-3">
-                    <Badge className="bg-background/80 backdrop-blur text-foreground border-0 text-xs">
-                      <Star className="h-3 w-3 fill-primary text-primary mr-1" />
-                      {car.rating}
-                    </Badge>
-                  </div>
-                </div>
-                <CardContent className="p-4">
-                  <div className="flex items-start justify-between mb-2">
-                    <div>
-                      <h3 className="font-semibold text-foreground">{car.name}</h3>
-                      <p className="text-xs text-muted-foreground">{car.category}</p>
-                    </div>
-                    <div className="text-right">
-                      <span className="text-xl font-bold text-primary">${car.price}</span>
-                      <span className="text-xs text-muted-foreground">/day</span>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                    <span>{car.seats} seats</span>
-                    <span>•</span>
-                    <span>{car.transmission}</span>
-                  </div>
-                  <Button className="w-full mt-3 h-9 text-sm font-medium cursor-pointer" onClick={() => navigate("/cars")}>
-                    Book Now
-                  </Button>
-                </CardContent>
-              </Card>
+              <FeaturedCarCard car={car} onOpen={handleOpenCars} />
             </motion.div>
           ))}
         </div>
@@ -577,13 +622,9 @@ export default function Index() {
           whileInView={{ opacity: 1, scale: 1 }}
           viewport={{ once: true }}
           transition={{ duration: 0.5 }}
-          className="relative overflow-hidden rounded-3xl p-10 text-center md:p-16"
-          style={{ background: "linear-gradient(135deg, #cc1f1f 0%, #991515 100%)" }}
+          className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#cc1f1f] to-[#991515] p-10 text-center md:p-16"
         >
-          <div
-            className="absolute inset-0 opacity-20"
-            style={{ background: "radial-gradient(ellipse at center, #ff4444 0%, transparent 70%)" }}
-          />
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,#ff4444_0%,transparent_70%)] opacity-20" />
           <div className="relative z-10">
             <h2 className="mb-4 text-3xl font-bold text-white md:text-4xl">
               Ready to hit the road?

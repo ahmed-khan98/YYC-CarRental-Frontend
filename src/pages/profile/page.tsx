@@ -140,13 +140,13 @@ function ProfileInner() {
         <CardContent className="space-y-4">
           <div className="space-y-1.5">
             <Label className="text-xs">Full Name</Label>
-            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="John Smith" />
+            <Input value={name} onChange={(e) => setName(e.target.value)} />
           </div>
           <div className="space-y-1.5">
             <Label className="text-xs flex items-center gap-1">
               <Phone className="h-3 w-3" /> Phone Number
             </Label>
-            <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+1 403 000 0000" type="tel" />
+            <Input value={phone} onChange={(e) => setPhone(e.target.value)} type="tel" />
           </div>
         </CardContent>
       </Card>

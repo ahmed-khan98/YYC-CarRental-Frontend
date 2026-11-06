@@ -1,6 +1,15 @@
+import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { MapPin, Phone, Mail } from "lucide-react";
 import { BrandLogo } from "@/components/brand-logo.tsx";
+
+function FooterNavLink({ to, children }: { to: string; children: ReactNode }) {
+  return (
+    <Link to={to} className="hover:text-primary transition-colors cursor-pointer">
+      {children}
+    </Link>
+  );
+}
 
 export default function Footer() {
   const year = new Date().getFullYear();
@@ -22,11 +31,11 @@ export default function Footer() {
           <div className="space-y-3">
             <h4 className="text-sm font-semibold text-foreground">Quick Links</h4>
             <ul className="space-y-2 text-sm text-muted-foreground">
-              <li><Link to="/cars" className="hover:text-primary transition-colors cursor-pointer">Browse Cars</Link></li>
-              <li><Link to="/dashboard" className="hover:text-primary transition-colors cursor-pointer">My Bookings</Link></li>
-              <li><Link to="/about" className="hover:text-primary transition-colors cursor-pointer">About Us</Link></li>
-              <li><Link to="/faq" className="hover:text-primary transition-colors cursor-pointer">FAQ</Link></li>
-              <li><Link to="/contact" className="hover:text-primary transition-colors cursor-pointer">Contact Us</Link></li>
+              <li><FooterNavLink to="/cars">Browse Cars</FooterNavLink></li>
+              <li><FooterNavLink to="/dashboard">My Bookings</FooterNavLink></li>
+              <li><FooterNavLink to="/about">About Us</FooterNavLink></li>
+              <li><FooterNavLink to="/faq">FAQ</FooterNavLink></li>
+              <li><FooterNavLink to="/contact">Contact Us</FooterNavLink></li>
             </ul>
           </div>
 
@@ -42,9 +51,9 @@ export default function Footer() {
           <div className="space-y-3">
             <h4 className="text-sm font-semibold text-foreground">Legal</h4>
             <ul className="space-y-2 text-sm text-muted-foreground">
-              <li><Link to="/privacy" className="hover:text-primary transition-colors cursor-pointer">Privacy Policy</Link></li>
-              <li><Link to="/terms" className="hover:text-primary transition-colors cursor-pointer">Terms of Service</Link></li>
-              <li><Link to="/faq" className="hover:text-primary transition-colors cursor-pointer">FAQ</Link></li>
+              <li><FooterNavLink to="/privacy">Privacy Policy</FooterNavLink></li>
+              <li><FooterNavLink to="/terms">Terms of Service</FooterNavLink></li>
+              <li><FooterNavLink to="/faq">FAQ</FooterNavLink></li>
             </ul>
           </div>
         </div>

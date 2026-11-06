@@ -48,6 +48,7 @@ function AlertDialogOverlay({
 
 function AlertDialogContent({
   className,
+  onEscapeKeyDown,
   ...props
 }: React.ComponentProps<typeof AlertDialogPrimitive.Content>) {
   return (
@@ -60,6 +61,10 @@ function AlertDialogContent({
           className,
         )}
         {...props}
+        onEscapeKeyDown={(event) => {
+          event.preventDefault();
+          onEscapeKeyDown?.(event);
+        }}
       />
     </AlertDialogPortal>
   );
@@ -101,7 +106,7 @@ function AlertDialogTitle({
   return (
     <AlertDialogPrimitive.Title
       data-slot="alert-dialog-title"
-      className={cn("text-lg font-semibold", className)}
+      className={cn("text-lg font-semibold border-b border-border pb-3", className)}
       {...props}
     />
   );

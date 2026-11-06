@@ -6,6 +6,12 @@ import { cn } from "@/lib/utils.ts";
 import { mediaKindFromFile, persistBrowserFile } from "@/lib/mediaUrl.ts";
 import { compressImageForUpload, snapshotVideoFrame } from "@/lib/compressImage.ts";
 import { toast } from "sonner";
+import {
+  formatBytes,
+  formatRecordingDuration,
+  pickRecorderMimeType,
+  stopStream,
+} from "@/lib/mediaCapture.ts";
 
 export const MAX_CAR_IMAGES = 10;
 export const MAX_CAR_VIDEOS = 2;
@@ -18,31 +24,6 @@ const CAMERA_VIDEO = {
   height: { ideal: 720, max: 720 },
   frameRate: { ideal: 24, max: 30 },
 };
-
-function stopStream(stream: MediaStream | null) {
-  stream?.getTracks().forEach((track) => track.stop());
-}
-
-function pickRecorderMimeType(): string | undefined {
-  if (typeof MediaRecorder === "undefined") return undefined;
-  const candidates = [
-    "video/webm;codecs=vp9,opus",
-    "video/webm;codecs=vp8,opus",
-    "video/webm",
-    "video/mp4",
-  ];
-  return candidates.find((type) => MediaRecorder.isTypeSupported(type));
-}
-
-function formatBytes(bytes: number) {
-  return `${Math.round(bytes / (1024 * 1024))}MB`;
-}
-
-function formatRecordingDuration(totalSeconds: number) {
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
-}
 
 type CameraMode = "photo" | "video";
 
@@ -457,9 +438,9 @@ export function CarMediaCapture({
           )}
           {...dropHandlers}
         >
-          <div className="grid grid-cols-3 gap-2">
+          <div className="flex flex-wrap gap-2">
             {previews.map((item, index) => (
-              <div key={`${item.url}-${index}`} className="relative">
+              <div key={`${item.url}-${index}`} className="relative h-14 w-20 shrink-0">
                 {item.kind === "video" ? (
                   <video
                     src={item.url}
@@ -478,10 +459,10 @@ export function CarMediaCapture({
                 <button
                   type="button"
                   onClick={() => removeAt(index)}
-                  className="absolute top-1 right-1 flex h-6 w-6 items-center justify-center rounded-full bg-background/90 text-muted-foreground hover:text-destructive cursor-pointer"
+                  className="absolute -top-1.5 -right-1.5 flex h-5 w-5 items-center justify-center rounded-full border border-border/60 bg-background text-muted-foreground shadow-sm hover:text-destructive cursor-pointer"
                   aria-label={`Remove ${item.kind}`}
                 >
-                  <X className="h-3.5 w-3.5" />
+                  <X className="h-3 w-3" />
                 </button>
               </div>
             ))}

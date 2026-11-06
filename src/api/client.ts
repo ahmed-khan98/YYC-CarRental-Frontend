@@ -6,11 +6,25 @@ export const REFRESH_KEY = "yyc_refresh_token";
 export const USER_KEY = "yyc_user";
 export const AUTH_SESSION_EXPIRED_EVENT = "yyc:session-expired";
 
-export const API_BASE = String(
-  import.meta.env.API_BASE_URL || "https://api.yyccarrental.com/api/v1",
-).replace(/\/$/, "");
+function configuredApiBase() {
+  const raw = import.meta.env.API_BASE_URL || import.meta.env.VITE_API_BASE_URL || "";
+  return String(raw).replace(/\/$/, "");
+}
 
-export const API_ORIGIN = API_BASE.replace(/\/api(?:\/v\d+)?$/i, "") || "https://api.yyccarrental.com";
+function resolveApiBase() {
+  const configured = configuredApiBase();
+  // Dev: hit the Vite proxy so phones on 192.168.x.x:5173 don't call localhost on the phone.
+  if (import.meta.env.DEV) {
+    return "/api/v1";
+  }
+  return configured || "http://localhost:5000/api/v1";
+}
+
+export const API_BASE = resolveApiBase();
+
+export const API_ORIGIN = /^https?:\/\//i.test(API_BASE)
+  ? API_BASE.replace(/\/api(?:\/v\d+)?$/i, "")
+  : "";
 
 type RetryConfig = InternalAxiosRequestConfig & { _retry?: boolean };
 

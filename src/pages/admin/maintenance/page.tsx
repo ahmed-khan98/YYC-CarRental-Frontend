@@ -14,6 +14,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "sonner";
 import { Plus, Wrench } from "lucide-react";
 import { format } from "date-fns";
+import { ADMIN_LIST_LIMIT, listItems, listMeta } from "@/lib/pagination.ts";
+import { AdminListPagination } from "@/components/admin-list-pagination.tsx";
 
 interface MaintForm {
   carId: string; type: string; description: string; scheduledDate: string; cost: string; notes: string;
@@ -29,15 +31,18 @@ const STATUS_COLORS: Record<string, string> = {
 export default function AdminMaintenancePage() {
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
+  const [page, setPage] = useState(1);
   const { data: cars } = useQuery({
     queryKey: ["cars", { includeDeactivated: true }],
     queryFn: () => carsApi.list({ includeDeactivated: true }),
     enabled: open,
   });
-  const { data: allMaintenance = [], isLoading: scheduledLoading } = useQuery({
-    queryKey: ["maintenance"],
-    queryFn: () => maintenanceApi.list(),
+  const { data: maintenanceResult, isLoading: scheduledLoading } = useQuery({
+    queryKey: ["maintenance", { page, limit: ADMIN_LIST_LIMIT }],
+    queryFn: () => maintenanceApi.list({ page, limit: ADMIN_LIST_LIMIT }),
   });
+  const allMaintenance = listItems(maintenanceResult);
+  const maintenanceMeta = listMeta(maintenanceResult, page, ADMIN_LIST_LIMIT);
 
   const createMaint = useMutation({
     mutationFn: maintenanceApi.create,
@@ -90,7 +95,7 @@ export default function AdminMaintenancePage() {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h2 className="text-2xl font-bold">Maintenance</h2>
-          <p className="text-muted-foreground text-sm">{allMaintenance.length} records</p>
+          <p className="text-muted-foreground text-sm">{maintenanceMeta.total} records</p>
         </div>
         <Button onClick={openCreate} className="cursor-pointer"><Plus className="h-4 w-4 mr-2" />Schedule Maintenance</Button>
       </div>
@@ -136,6 +141,15 @@ export default function AdminMaintenancePage() {
           })}
         </div>
       )}
+      {!scheduledLoading && (
+        <AdminListPagination
+          page={maintenanceMeta.page}
+          totalPages={maintenanceMeta.totalPages}
+          total={maintenanceMeta.total}
+          limit={maintenanceMeta.limit}
+          onPageChange={setPage}
+        />
+      )}
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>
@@ -146,7 +160,7 @@ export default function AdminMaintenancePage() {
               <Select value={form.carId} onValueChange={(v) => setForm((p) => ({ ...p, carId: v }))}>
                 <SelectTrigger><SelectValue placeholder="Select vehicle" /></SelectTrigger>
                 <SelectContent>
-                  {(cars ?? []).map((c) => (
+                  {listItems(cars).map((c) => (
                     <SelectItem key={c._id} value={c._id}>{c.year} {c.make} {c.model} — {c.licensePlate}</SelectItem>
                   ))}
                 </SelectContent>
@@ -159,7 +173,6 @@ export default function AdminMaintenancePage() {
                   type={key === "scheduledDate" ? "date" : key === "cost" ? "number" : "text"}
                   value={form[key]}
                   onChange={f(key)}
-                  placeholder={label.replace(" *","")}
                 />
               </div>
             ))}
@@ -170,7 +183,6 @@ export default function AdminMaintenancePage() {
                 rows={2}
                 value={form.description}
                 onChange={f("description")}
-                placeholder="Describe the maintenance work..."
               />
             </div>
           </div>

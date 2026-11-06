@@ -8,6 +8,7 @@ import { locationsApi } from "@/api/locations.api.ts";
 import { servicesApi } from "@/api/services.api.ts";
 import { usersApi } from "@/api/users.api.ts";
 import { getApiErrorMessage } from "@/api/client.ts";
+import { listItems } from "@/lib/pagination.ts";
 import { carPrimaryImage } from "@/lib/mediaUrl.ts";
 import {
   BookingDetailCard,
@@ -19,6 +20,7 @@ import { BookingNotesSection } from "@/components/booking-form/booking-notes-sec
 import { BookingServicesSection } from "@/components/booking-form/booking-services-section.tsx";
 import { BookingSummaryPanel } from "@/components/booking-form/booking-summary-panel.tsx";
 import { CustomerSearchSelect } from "@/components/customer-search-select.tsx";
+import { EMAIL_ERROR, isValidEmail } from "@/lib/email.ts";
 import { Badge } from "@/components/ui/badge.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog.tsx";
@@ -47,6 +49,7 @@ import {
   isValidRentalPeriod,
 } from "@/lib/rentalPricing.ts";
 import { isStaffRole } from "@/lib/roles.ts";
+import { todayYmd } from "@/lib/bookingWindow.ts";
 import { formatTime12h } from "@/lib/timeFormat.ts";
 import {
   formatVehicleCategoryLabel,
@@ -89,7 +92,7 @@ const WIZARD_STEPS = [
 const TRANSMISSIONS = ["all", "automatic", "manual"] as const;
 const FUEL_TYPES = ["all", "gasoline", "diesel", "electric", "hybrid"] as const;
 
-const today = format(new Date(), "yyyy-MM-dd");
+const today = todayYmd();
 const tomorrow = format(new Date(Date.now() + 86400000), "yyyy-MM-dd");
 
 function getCarImage(car: Car) {
@@ -388,26 +391,32 @@ export function AdminCreateBookingWizard() {
   const [notes, setNotes] = useState("");
 
   const [addCustomerOpen, setAddCustomerOpen] = useState(false);
+  const [customerSearchOpen, setCustomerSearchOpen] = useState(false);
   const [newCustomerName, setNewCustomerName] = useState("");
   const [newCustomerEmail, setNewCustomerEmail] = useState("");
   const [newCustomerPhone, setNewCustomerPhone] = useState("");
   const [newCustomerPassword, setNewCustomerPassword] = useState("");
+  const [newCustomerEmailError, setNewCustomerEmailError] = useState<string | null>(null);
+  const [newCustomerPhoneError, setNewCustomerPhoneError] = useState<string | null>(null);
 
-  const { data: locations, isLoading: locationsLoading } = useQuery({
+  const { data: locationsResult, isLoading: locationsLoading } = useQuery({
     queryKey: ["locations", { activeOnly: true }],
     queryFn: () => locationsApi.list(true),
     enabled: step === 1,
   });
-  const { data: users, isLoading: usersLoading } = useQuery({
+  const { data: usersResult, isLoading: usersLoading } = useQuery({
     queryKey: ["users"],
     queryFn: () => usersApi.listUsers(),
     enabled: step >= 3,
   });
-  const { data: services } = useQuery({
+  const { data: servicesResult } = useQuery({
     queryKey: ["services", { activeOnly: true }],
     queryFn: () => servicesApi.list(true),
     enabled: step >= 4,
   });
+  const locations = listItems(locationsResult);
+  const users = listItems(usersResult);
+  const services = listItems(servicesResult);
 
   const adminCreate = useMutation({
     mutationFn: bookingsApi.adminCreate,
@@ -425,6 +434,8 @@ export function AdminCreateBookingWizard() {
       setNewCustomerEmail("");
       setNewCustomerPhone("");
       setNewCustomerPassword("");
+      setNewCustomerEmailError(null);
+      setNewCustomerPhoneError(null);
     },
     onError: (err) => toast.error(getApiErrorMessage(err)),
   });
@@ -590,15 +601,27 @@ export function AdminCreateBookingWizard() {
   };
 
   const handleCreateCustomer = () => {
-    if (!newCustomerName.trim() || !newCustomerEmail.trim() || !newCustomerPassword) {
-      toast.error("Please fill in name, email, and password");
+    if (
+      !newCustomerName.trim() ||
+      !newCustomerEmail.trim() ||
+      !newCustomerPhone.trim() ||
+      !newCustomerPassword
+    ) {
+      if (!newCustomerPhone.trim()) setNewCustomerPhoneError("Phone is required.");
+      toast.error("Please fill in name, email, phone, and password");
       return;
     }
+    if (!isValidEmail(newCustomerEmail)) {
+      setNewCustomerEmailError(EMAIL_ERROR);
+      return;
+    }
+    setNewCustomerEmailError(null);
+    setNewCustomerPhoneError(null);
     createCustomer.mutate({
       name: newCustomerName.trim(),
       email: newCustomerEmail.trim(),
       password: newCustomerPassword,
-      phone: newCustomerPhone.trim() || undefined,
+      phone: newCustomerPhone.trim(),
     });
   };
 
@@ -882,7 +905,10 @@ export function AdminCreateBookingWizard() {
                 variant="ghost"
                 size="sm"
                 className="h-7 text-xs cursor-pointer"
-                onClick={() => setAddCustomerOpen(true)}
+                onClick={() => {
+                  setCustomerSearchOpen(false);
+                  setAddCustomerOpen(true);
+                }}
               >
                 <UserPlus className="mr-1 h-3.5 w-3.5" />
                 Add Customer
@@ -898,6 +924,8 @@ export function AdminCreateBookingWizard() {
                 value={userId}
                 onChange={setUserId}
                 placeholder="Select a customer"
+                open={customerSearchOpen}
+                onOpenChange={setCustomerSearchOpen}
               />
               )}
             </div>
@@ -980,41 +1008,55 @@ export function AdminCreateBookingWizard() {
           </DialogHeader>
           <div className="space-y-4 py-1">
             <div className="space-y-1.5">
-              <Label htmlFor="wizard-customer-name">Full Name</Label>
+              <Label htmlFor="wizard-customer-name">Full Name *</Label>
               <Input
                 id="wizard-customer-name"
                 value={newCustomerName}
                 onChange={(e) => setNewCustomerName(e.target.value)}
-                placeholder="John Doe"
+                required
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="wizard-customer-email">Email</Label>
+              <Label htmlFor="wizard-customer-email">Email *</Label>
               <Input
                 id="wizard-customer-email"
                 type="email"
                 value={newCustomerEmail}
-                onChange={(e) => setNewCustomerEmail(e.target.value)}
-                placeholder="john@example.com"
+                onChange={(e) => {
+                  setNewCustomerEmail(e.target.value);
+                  if (newCustomerEmailError) setNewCustomerEmailError(null);
+                }}
+                required
+                aria-invalid={Boolean(newCustomerEmailError)}
               />
+              {newCustomerEmailError ? (
+                <p className="text-[11px] text-destructive">{newCustomerEmailError}</p>
+              ) : null}
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="wizard-customer-phone">Phone (optional)</Label>
+              <Label htmlFor="wizard-customer-phone">Phone *</Label>
               <Input
                 id="wizard-customer-phone"
                 value={newCustomerPhone}
-                onChange={(e) => setNewCustomerPhone(e.target.value)}
-                placeholder="+1 403 555 0100"
+                onChange={(e) => {
+                  setNewCustomerPhone(e.target.value);
+                  if (newCustomerPhoneError) setNewCustomerPhoneError(null);
+                }}
+                required
+                aria-invalid={Boolean(newCustomerPhoneError)}
               />
+              {newCustomerPhoneError ? (
+                <p className="text-[11px] text-destructive">{newCustomerPhoneError}</p>
+              ) : null}
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="wizard-customer-password">Temporary Password</Label>
+              <Label htmlFor="wizard-customer-password">Temporary Password *</Label>
               <Input
                 id="wizard-customer-password"
                 type="password"
                 value={newCustomerPassword}
                 onChange={(e) => setNewCustomerPassword(e.target.value)}
-                placeholder="Min. 6 characters"
+                required
                 minLength={6}
               />
             </div>

@@ -86,7 +86,7 @@ type DatePickerProps = {
   id?: string;
 };
 
-export function DatePicker({
+export const DatePicker = memo(function DatePicker({
   value,
   onChange,
   minDate,
@@ -128,10 +128,12 @@ export function DatePicker({
   const handleSelect = useCallback(
     (day: Date | undefined) => {
       if (!day) return;
+      if (min && day < min) return;
+      if (max && day > max) return;
       onChange(toYmd(day));
       setOpen(false);
     },
-    [onChange],
+    [max, min, onChange],
   );
 
   const displayValue = selected ? format(selected, "MMM d, yyyy") : placeholder;
@@ -188,6 +190,8 @@ export function DatePicker({
             mode="single"
             numberOfMonths={1}
             defaultMonth={calendarMonth}
+            startMonth={min ? startOfMonth(min) : undefined}
+            endMonth={max ? startOfMonth(max) : undefined}
             selected={selected}
             onSelect={handleSelect}
             disabled={disabled}
@@ -201,4 +205,4 @@ export function DatePicker({
       </PopoverContent>
     </Popover>
   );
-}
+});

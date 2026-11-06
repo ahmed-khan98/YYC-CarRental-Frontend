@@ -6,13 +6,10 @@ import { cn } from "@/lib/utils.ts";
 import { resolveMediaUrl } from "@/lib/mediaUrl.ts";
 import { compressImageForUpload, snapshotVideoFrame } from "@/lib/compressImage.ts";
 import { toast } from "sonner";
+import { stopStream } from "@/lib/mediaCapture.ts";
 
 const MAX_LICENSE_BYTES = 50 * 1024 * 1024;
 const IMAGE_NAME = /\.(jpe?g|png|gif|webp|heic|heif|bmp|avif)$/i;
-
-function stopStream(stream: MediaStream | null) {
-  stream?.getTracks().forEach((track) => track.stop());
-}
 
 function isLikelyImageFile(file: File) {
   if (file.type.startsWith("image/")) return true;

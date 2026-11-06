@@ -7,6 +7,7 @@ const reactRoot = path.resolve(__dirname, "node_modules/react");
 const reactDomRoot = path.resolve(__dirname, "node_modules/react-dom");
 
 export default defineConfig({
+  envPrefix: ["VITE_", "API_"],
   server: {
     host: "0.0.0.0",
     port: 5173,

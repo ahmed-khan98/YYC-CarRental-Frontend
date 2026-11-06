@@ -7,62 +7,38 @@ import { Input } from "@/components/ui/input.tsx";
 import { Label } from "@/components/ui/label.tsx";
 import { Badge } from "@/components/ui/badge.tsx";
 import { AdminDataTable, type AdminTableColumn } from "@/components/admin-data-table.tsx";
+import { AdminListPagination } from "@/components/admin-list-pagination.tsx";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog.tsx";
 import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog.tsx";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select.tsx";
 import { Switch } from "@/components/ui/switch.tsx";
 import { toast } from "sonner";
-import { formatServiceRateLabel } from "@/lib/serviceCharge.ts";
+import { chargeTypeLabel, formatServiceRateLabel } from "@/lib/serviceCharge.ts";
+import {
+  CATEGORY_BADGE,
+  EMPTY_SVC_FORM,
+  truncateWords,
+  type SvcForm,
+} from "./serviceListHelpers.ts";
 import { patchText } from "@/lib/patchPayload.ts";
 import { Plus, Pencil, Trash2, Shield } from "lucide-react";
 import { cn } from "@/lib/utils.ts";
 import { Hint } from "@/components/ui/tooltip.tsx";
 import { useAuth } from "@/hooks/use-auth.ts";
 import { canDeleteRecords } from "@/lib/roles.ts";
-
-interface SvcForm {
-  name: string;
-  description: string;
-  dailyRate: string;
-  chargeType: ServiceChargeType;
-  category: ServiceCategory;
-  allowQuantity: boolean;
-}
-const EMPTY: SvcForm = {
-  name: "",
-  description: "",
-  dailyRate: "",
-  chargeType: "per_day",
-  category: "equipment",
-  allowQuantity: false,
-};
-
-const CATEGORY_BADGE: Record<string, string> = {
-  equipment: "bg-blue-50 text-blue-700 border-blue-200",
-  driver: "bg-violet-50 text-violet-700 border-violet-200",
-  insurance: "bg-amber-50 text-amber-800 border-amber-200",
-  other: "bg-slate-50 text-slate-700 border-slate-200",
-};
-
-function chargeTypeLabel(chargeType?: ServiceChargeType) {
-  return chargeType === "per_trip" ? "Per trip" : "Per day";
-}
-
-function truncateWords(text: string, maxWords = 8) {
-  if (!text) return "—";
-  const words = text.trim().split(/\s+/);
-  if (words.length <= maxWords) return text;
-  return `${words.slice(0, maxWords).join(" ")}...`;
-}
+import { ADMIN_LIST_LIMIT, listItems, listMeta } from "@/lib/pagination.ts";
 
 export default function AdminServicesPage() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const canDelete = canDeleteRecords(user?.role);
-  const { data: services, isLoading } = useQuery({
-    queryKey: ["services"],
-    queryFn: () => servicesApi.list(),
+  const [page, setPage] = useState(1);
+  const { data: servicesResult, isLoading } = useQuery({
+    queryKey: ["services", { page, limit: ADMIN_LIST_LIMIT }],
+    queryFn: () => servicesApi.list({ page, limit: ADMIN_LIST_LIMIT }),
   });
+  const services = listItems(servicesResult);
+  const servicesMeta = listMeta(servicesResult, page, ADMIN_LIST_LIMIT);
   const create = useMutation({
     mutationFn: servicesApi.create,
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["services"] }),
@@ -72,21 +48,26 @@ export default function AdminServicesPage() {
       servicesApi.update(serviceId, data),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["services"] }),
   });
-  const remove = useMutation({
-    mutationFn: servicesApi.remove,
+  // Temporary: hard delete commented out — delete button calls deactivate
+  // const remove = useMutation({
+  //   mutationFn: servicesApi.remove,
+  //   onSuccess: () => queryClient.invalidateQueries({ queryKey: ["services"] }),
+  // });
+  const deactivate = useMutation({
+    mutationFn: servicesApi.deactivate,
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["services"] }),
   });
 
   const [open, setOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
-  const [form, setForm] = useState<SvcForm>(EMPTY);
+  const [form, setForm] = useState<SvcForm>(EMPTY_SVC_FORM);
   const [loading, setLoading] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<AdditionalService | null>(null);
 
   const f = (k: "name" | "description" | "dailyRate") => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
     setForm((p) => ({ ...p, [k]: e.target.value }));
 
-  const openCreate = () => { setForm(EMPTY); setEditId(null); setOpen(true); };
+  const openCreate = () => { setForm(EMPTY_SVC_FORM); setEditId(null); setOpen(true); };
   const openEdit = (svc: AdditionalService) => {
     setForm({
       name: svc.name,
@@ -136,7 +117,8 @@ export default function AdminServicesPage() {
   const handleDelete = async () => {
     if (!deleteTarget) return;
     try {
-      await remove.mutateAsync(deleteTarget._id);
+      // await remove.mutateAsync(deleteTarget._id);
+      await deactivate.mutateAsync(deleteTarget._id);
       toast.success("Deleted");
       setDeleteTarget(null);
     } catch {
@@ -144,10 +126,11 @@ export default function AdminServicesPage() {
     }
   };
 
-  const handleToggle = async (id: string, current: boolean) => {
-    await update.mutateAsync({ serviceId: id, data: { isActive: !current } });
-    toast.success(`Service ${!current ? "activated" : "deactivated"}`);
-  };
+  // Temporary: Active toggle handler hidden — will return later
+  // const handleToggle = async (id: string, current: boolean) => {
+  //   await update.mutateAsync({ serviceId: id, data: { isActive: !current } });
+  //   toast.success(`Service ${!current ? "activated" : "deactivated"}`);
+  // };
 
   const serviceColumns: AdminTableColumn<AdditionalService>[] = useMemo(
     () => [
@@ -200,36 +183,38 @@ export default function AdminServicesPage() {
           </span>
         ),
       },
-      {
-        id: "status",
-        header: "Status",
-        cell: (svc) => (
-          <Badge
-            variant="outline"
-            className={cn(
-              "text-[11px] font-medium border",
-              svc.isActive
-                ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                : "bg-red-50 text-red-700 border-red-200",
-            )}
-          >
-            {svc.isActive ? "Active" : "Inactive"}
-          </Badge>
-        ),
-      },
-      {
-        id: "active",
-        header: "Active",
-        className: "hidden lg:table-cell",
-        headClassName: "hidden lg:table-cell",
-        cell: (svc) => (
-          <Switch
-            checked={svc.isActive}
-            onCheckedChange={() => handleToggle(svc._id, svc.isActive)}
-            className="cursor-pointer"
-          />
-        ),
-      },
+      // Temporary: Status badge column hidden — do not delete
+      // {
+      //   id: "status",
+      //   header: "Status",
+      //   cell: (svc) => (
+      //     <Badge
+      //       variant="outline"
+      //       className={cn(
+      //         "text-[11px] font-medium border",
+      //         svc.isActive
+      //           ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+      //           : "bg-red-50 text-red-700 border-red-200",
+      //       )}
+      //     >
+      //       {svc.isActive ? "Active" : "Inactive"}
+      //     </Badge>
+      //   ),
+      // },
+      // Temporary: Active toggle column hidden — do not delete
+      // {
+      //   id: "active",
+      //   header: "Active",
+      //   className: "hidden lg:table-cell",
+      //   headClassName: "hidden lg:table-cell",
+      //   cell: (svc) => (
+      //     <Switch
+      //       checked={svc.isActive}
+      //       onCheckedChange={() => handleToggle(svc._id, svc.isActive)}
+      //       className="cursor-pointer"
+      //     />
+      //   ),
+      // },
       {
         id: "actions",
         header: "Actions",
@@ -273,19 +258,28 @@ export default function AdminServicesPage() {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h2 className="text-2xl font-bold">Additional Services</h2>
-          <p className="text-muted-foreground text-sm">{services?.length ?? 0} services</p>
+          <p className="text-muted-foreground text-sm">{servicesMeta.total} services</p>
         </div>
         <Button onClick={openCreate} className="cursor-pointer"><Plus className="h-4 w-4 mr-2" />Add Service</Button>
       </div>
 
       <AdminDataTable
         columns={serviceColumns}
-        data={services ?? []}
+        data={services}
         getRowKey={(svc) => svc._id}
         isLoading={isLoading}
         emptyIcon={Shield}
         emptyMessage="No services yet"
       />
+      {!isLoading && (
+        <AdminListPagination
+          page={servicesMeta.page}
+          totalPages={servicesMeta.totalPages}
+          total={servicesMeta.total}
+          limit={servicesMeta.limit}
+          onPageChange={setPage}
+        />
+      )}
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>
@@ -293,7 +287,7 @@ export default function AdminServicesPage() {
           <div className="space-y-3">
             <div className="space-y-1">
               <Label className="text-xs">Name *</Label>
-              <Input value={form.name} onChange={f("name")} placeholder="e.g. Baby Car Seat" />
+              <Input value={form.name} onChange={f("name")} />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
@@ -323,7 +317,7 @@ export default function AdminServicesPage() {
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Price ($) *</Label>
-              <Input type="number" value={form.dailyRate} onChange={f("dailyRate")} placeholder="15" />
+              <Input type="number" value={form.dailyRate} onChange={f("dailyRate")} />
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Description (optional)</Label>
@@ -332,7 +326,6 @@ export default function AdminServicesPage() {
                 rows={2}
                 value={form.description}
                 onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))}
-                placeholder="Short description of the service..."
               />
             </div>
             <div className="flex items-center justify-between rounded-lg border border-border/50 px-3 py-3">
@@ -359,7 +352,7 @@ export default function AdminServicesPage() {
             ? `This will permanently remove "${deleteTarget.name}". This action cannot be undone.`
             : ""
         }
-        loading={remove.isPending}
+        loading={deactivate.isPending}
         onConfirm={handleDelete}
       />
     </div>

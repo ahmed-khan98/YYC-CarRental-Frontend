@@ -2,23 +2,20 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { usersApi } from "@/api/users.api.ts";
 import { getApiErrorMessage } from "@/api/client.ts";
-import { roleLabel, isStaffRole } from "@/lib/roles.ts";
+import { roleLabel, isStaffRole, roleBadgeClass } from "@/lib/roles.ts";
 import { Badge } from "@/components/ui/badge.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import { Input } from "@/components/ui/input.tsx";
 import { Label } from "@/components/ui/label.tsx";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog.tsx";
 import { AdminDataTable, type AdminTableColumn } from "@/components/admin-data-table.tsx";
+import { AdminListPagination } from "@/components/admin-list-pagination.tsx";
 import { toast } from "sonner";
 import { Plus, Users } from "lucide-react";
 import type { User } from "@/types/index.ts";
 import { formatDisplayName } from "@/lib/displayName.ts";
-
-function roleBadgeClass(role?: string) {
-  if (role === "admin") return "bg-primary/20 text-primary border-primary/30 text-xs";
-  if (role === "sub_admin") return "bg-blue-500/20 text-blue-400 border-blue-500/30 text-xs";
-  return "bg-secondary text-secondary-foreground text-xs";
-}
+import { ADMIN_LIST_LIMIT, listItems, listMeta } from "@/lib/pagination.ts";
+import { EMAIL_ERROR, isValidEmail } from "@/lib/email.ts";
 
 export default function AdminCustomersPage() {
   const queryClient = useQueryClient();
@@ -27,12 +24,17 @@ export default function AdminCustomersPage() {
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
+  const [emailError, setEmailError] = useState<string | null>(null);
+  const [phoneError, setPhoneError] = useState<string | null>(null);
 
-  const { data: users, isLoading } = useQuery({
-    queryKey: ["users"],
-    queryFn: () => usersApi.listUsers(),
+  const [page, setPage] = useState(1);
+  const { data: usersResult, isLoading } = useQuery({
+    queryKey: ["users", { page, limit: ADMIN_LIST_LIMIT }],
+    queryFn: () => usersApi.listUsers({ page, limit: ADMIN_LIST_LIMIT }),
   });
-  const customers = (users ?? []).filter((user) => !isStaffRole(user.role));
+  const users = listItems(usersResult);
+  const usersMeta = listMeta(usersResult, page, ADMIN_LIST_LIMIT);
+  const customers = users.filter((user) => !isStaffRole(user.role));
 
   const createMutation = useMutation({
     mutationFn: usersApi.createCustomer,
@@ -44,20 +46,29 @@ export default function AdminCustomersPage() {
       setEmail("");
       setPhone("");
       setPassword("");
+      setEmailError(null);
+      setPhoneError(null);
     },
     onError: (err) => toast.error(getApiErrorMessage(err)),
   });
 
   const handleCreate = () => {
-    if (!name.trim() || !email.trim() || !password) {
-      toast.error("Please fill in name, email, and password");
+    if (!name.trim() || !email.trim() || !phone.trim() || !password) {
+      if (!phone.trim()) setPhoneError("Phone is required.");
+      toast.error("Please fill in name, email, phone, and password");
       return;
     }
+    if (!isValidEmail(email)) {
+      setEmailError(EMAIL_ERROR);
+      return;
+    }
+    setEmailError(null);
+    setPhoneError(null);
     createMutation.mutate({
       name: name.trim(),
       email: email.trim(),
       password,
-      phone: phone.trim() || undefined,
+      phone: phone.trim(),
     });
   };
 
@@ -102,7 +113,7 @@ export default function AdminCustomersPage() {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h2 className="text-2xl font-bold">Customers</h2>
-          <p className="text-muted-foreground text-sm">{customers.length} registered customers</p>
+          <p className="text-muted-foreground text-sm">{usersMeta.total} registered customers</p>
         </div>
         <Button onClick={() => setOpen(true)} className="cursor-pointer">
           <Plus className="h-4 w-4 mr-2" />
@@ -118,6 +129,15 @@ export default function AdminCustomersPage() {
         emptyIcon={Users}
         emptyMessage="No customers yet"
       />
+      {!isLoading && (
+        <AdminListPagination
+          page={usersMeta.page}
+          totalPages={usersMeta.totalPages}
+          total={usersMeta.total}
+          limit={usersMeta.limit}
+          onPageChange={setPage}
+        />
+      )}
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-md">
@@ -126,41 +146,51 @@ export default function AdminCustomersPage() {
           </DialogHeader>
           <div className="space-y-4 py-1">
             <div className="space-y-1.5">
-              <Label htmlFor="customer-name">Full Name</Label>
+              <Label htmlFor="customer-name">Full Name *</Label>
               <Input
                 id="customer-name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="John Doe"
+                required
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="customer-email">Email</Label>
+              <Label htmlFor="customer-email">Email *</Label>
               <Input
                 id="customer-email"
                 type="email"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="john@example.com"
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  if (emailError) setEmailError(null);
+                }}
+                required
+                aria-invalid={Boolean(emailError)}
               />
+              {emailError ? <p className="text-[11px] text-destructive">{emailError}</p> : null}
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="customer-phone">Phone (optional)</Label>
+              <Label htmlFor="customer-phone">Phone *</Label>
               <Input
                 id="customer-phone"
                 value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                placeholder="+1 403 555 0100"
+                onChange={(e) => {
+                  setPhone(e.target.value);
+                  if (phoneError) setPhoneError(null);
+                }}
+                required
+                aria-invalid={Boolean(phoneError)}
               />
+              {phoneError ? <p className="text-[11px] text-destructive">{phoneError}</p> : null}
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="customer-password">Temporary Password</Label>
+              <Label htmlFor="customer-password">Temporary Password *</Label>
               <Input
                 id="customer-password"
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="Min. 6 characters"
+                required
                 minLength={6}
               />
             </div>

@@ -1,5 +1,5 @@
 import { format } from "date-fns";
-import type { ReactNode } from "react";
+import { memo, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   LogIn,
@@ -7,13 +7,13 @@ import {
   Gauge,
   Fuel,
   FileText,
-  Camera,
   ExternalLink,
   Eye,
 } from "lucide-react";
 import type { Booking, VehicleInspection } from "@/types/index.ts";
-import type { DateGroup, DateGroupItem } from "@/lib/bookingDateGroups.ts";
+import { dateGroupItemKey, type DateGroup } from "@/lib/bookingDateGroups.ts";
 import { BookingDropoffCell, BookingPickupCell } from "@/components/booking-schedule-cell.tsx";
+import { CheckoutMileageStats } from "@/components/checkout-mileage-stats.tsx";
 import { InspectionMediaGallery } from "@/components/inspection-media.tsx";
 import { inspectionMediaUrls } from "@/lib/mediaUrl.ts";
 import { Card, CardContent } from "@/components/ui/card.tsx";
@@ -28,7 +28,7 @@ import {
   TableRow,
 } from "@/components/ui/table.tsx";
 
-function InspectionDateRow({
+const InspectionDateRow = memo(function InspectionDateRow({
   inspection,
   booking,
   customerLabel,
@@ -91,6 +91,14 @@ function InspectionDateRow({
                   </span>
                 </span>
               </div>
+              {!isCheckIn && (
+                <CheckoutMileageStats
+                  variant="inline"
+                  checkInMileage={booking.checkInMileage ?? booking.checkIn?.mileage}
+                  checkOutMileage={inspection.mileage}
+                  booking={booking}
+                />
+              )}
               {inspection.notes && (
                 <div className="col-span-2 flex items-start gap-1">
                   <FileText className="h-3 w-3 shrink-0 mt-0.5" />
@@ -121,14 +129,86 @@ function InspectionDateRow({
       </CardContent>
     </Card>
   );
-}
+});
 
-function itemKey(item: DateGroupItem): string {
-  if (item.kind === "booking") {
-    return `booking-${item.booking._id}-${item.sortTime}`;
-  }
-  return `inspection-${item.inspection._id}`;
-}
+const BookingGroupTableRow = memo(function BookingGroupTableRow({
+  booking,
+  customerName,
+  customerEmail,
+  pickupLocationName,
+  dropoffLocationName,
+  onViewBooking,
+  statusColors,
+  paymentColors,
+}: {
+  booking: Booking;
+  customerName?: string;
+  customerEmail?: string;
+  pickupLocationName?: string;
+  dropoffLocationName?: string;
+  onViewBooking: (bookingId: string) => void;
+  statusColors: Record<string, string>;
+  paymentColors: Record<string, string>;
+}) {
+  return (
+    <TableRow>
+      <TableCell className="font-mono text-xs">
+        #{booking._id.slice(-8).toUpperCase()}
+      </TableCell>
+      <TableCell>
+        <div className="text-sm font-medium truncate max-w-[140px]">
+          {customerName ?? "—"}
+        </div>
+        {customerEmail && (
+          <div className="text-xs text-muted-foreground truncate max-w-[140px]">
+            {customerEmail}
+          </div>
+        )}
+      </TableCell>
+      <TableCell className="whitespace-normal">
+        <BookingPickupCell
+          booking={booking}
+          locationName={pickupLocationName}
+        />
+      </TableCell>
+      <TableCell className="hidden sm:table-cell whitespace-normal">
+        <BookingDropoffCell
+          booking={booking}
+          locationName={dropoffLocationName}
+        />
+      </TableCell>
+      <TableCell>
+        <Badge
+          className={`text-[10px] border capitalize ${statusColors[booking.status] ?? ""}`}
+        >
+          {booking.status.replace(/_/g, " ")}
+        </Badge>
+      </TableCell>
+      <TableCell className="hidden md:table-cell">
+        <Badge
+          variant="outline"
+          className={`text-[10px] capitalize ${paymentColors[booking.paymentStatus ?? "pending"] ?? ""}`}
+        >
+          {booking.paymentStatus ?? "pending"}
+        </Badge>
+      </TableCell>
+      <TableCell className="font-semibold text-primary text-sm">
+        ${booking.totalAmount}
+      </TableCell>
+      <TableCell className="text-right">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-8 cursor-pointer"
+          onClick={() => onViewBooking(booking._id)}
+        >
+          <Eye className="h-4 w-4 mr-1" /> View
+        </Button>
+      </TableCell>
+    </TableRow>
+  );
+});
+
 
 export function DateGroupedBookingsTable({
   groups,
@@ -182,64 +262,18 @@ export function DateGroupedBookingsTable({
                   <TableBody>
                     {bookingItems.map((item) => {
                       const booking = item.booking;
-                      const customerName = getCustomerLabel?.(booking);
-                      const customerEmail = getCustomerEmail?.(booking);
                       return (
-                        <TableRow key={itemKey(item)}>
-                          <TableCell className="font-mono text-xs">
-                            #{booking._id.slice(-8).toUpperCase()}
-                          </TableCell>
-                          <TableCell>
-                            <div className="text-sm font-medium truncate max-w-[140px]">
-                              {customerName ?? "—"}
-                            </div>
-                            {customerEmail && (
-                              <div className="text-xs text-muted-foreground truncate max-w-[140px]">
-                                {customerEmail}
-                              </div>
-                            )}
-                          </TableCell>
-                          <TableCell className="whitespace-normal">
-                            <BookingPickupCell
-                              booking={booking}
-                              locationName={getPickupLocationName?.(booking)}
-                            />
-                          </TableCell>
-                          <TableCell className="hidden sm:table-cell whitespace-normal">
-                            <BookingDropoffCell
-                              booking={booking}
-                              locationName={getDropoffLocationName?.(booking)}
-                            />
-                          </TableCell>
-                          <TableCell>
-                            <Badge
-                              className={`text-[10px] border capitalize ${statusColors[booking.status] ?? ""}`}
-                            >
-                              {booking.status.replace(/_/g, " ")}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="hidden md:table-cell">
-                            <Badge
-                              variant="outline"
-                              className={`text-[10px] capitalize ${paymentColors[booking.paymentStatus ?? "pending"] ?? ""}`}
-                            >
-                              {booking.paymentStatus ?? "pending"}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="font-semibold text-primary text-sm">
-                            ${booking.totalAmount}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-8 cursor-pointer"
-                              onClick={() => onViewBooking(booking._id)}
-                            >
-                              <Eye className="h-4 w-4 mr-1" /> View
-                            </Button>
-                          </TableCell>
-                        </TableRow>
+                        <BookingGroupTableRow
+                          key={dateGroupItemKey(item)}
+                          booking={booking}
+                          customerName={getCustomerLabel?.(booking)}
+                          customerEmail={getCustomerEmail?.(booking)}
+                          pickupLocationName={getPickupLocationName?.(booking)}
+                          dropoffLocationName={getDropoffLocationName?.(booking)}
+                          onViewBooking={onViewBooking}
+                          statusColors={statusColors}
+                          paymentColors={paymentColors}
+                        />
                       );
                     })}
                   </TableBody>
@@ -250,7 +284,7 @@ export function DateGroupedBookingsTable({
               <div className="space-y-2 mt-2">
                 {inspectionItems.map((item) => (
                   <InspectionDateRow
-                    key={itemKey(item)}
+                    key={dateGroupItemKey(item)}
                     inspection={item.inspection}
                     booking={item.booking}
                     customerLabel={getCustomerLabel?.(item.booking)}
@@ -289,14 +323,14 @@ export function DateGroupedBookingsList({
             {group.items.map((item) => {
               if (item.kind === "booking") {
                 return (
-                  <div key={itemKey(item)}>
+                  <div key={dateGroupItemKey(item)}>
                     {renderBooking(item.booking, group.dateKey)}
                   </div>
                 );
               }
               return (
                 <InspectionDateRow
-                  key={itemKey(item)}
+                  key={dateGroupItemKey(item)}
                   inspection={item.inspection}
                   booking={item.booking}
                   customerLabel={getCustomerLabel?.(item.booking)}

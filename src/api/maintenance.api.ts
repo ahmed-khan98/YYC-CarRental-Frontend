@@ -1,4 +1,5 @@
 import { apiClient } from "./client.ts";
+import { pageQuery, resolveListResult, type ListPageParams, type Paginated } from "@/lib/pagination.ts";
 import type { Maintenance, MaintenanceStatus } from "@/types/index.ts";
 
 export const maintenanceApi = {
@@ -6,13 +7,20 @@ export const maintenanceApi = {
     const res = await apiClient.get<Maintenance[]>(`/maintenance/car/${carId}`);
     return res.data;
   },
-  list: async () => {
-    const res = await apiClient.get<Maintenance[]>("/maintenance");
-    return res.data;
+  list: async (params?: ListPageParams): Promise<Maintenance[] | Paginated<Maintenance>> => {
+    const res = await apiClient.get<Maintenance[] | Paginated<Maintenance>>("/maintenance", {
+      params: pageQuery(params),
+    });
+    return resolveListResult<Maintenance>(res.data, params);
   },
-  listByStatus: async (status: MaintenanceStatus) => {
-    const res = await apiClient.get<Maintenance[]>("/maintenance", { params: { status } });
-    return res.data;
+  listByStatus: async (
+    status: MaintenanceStatus,
+    params?: ListPageParams,
+  ): Promise<Maintenance[] | Paginated<Maintenance>> => {
+    const res = await apiClient.get<Maintenance[] | Paginated<Maintenance>>("/maintenance", {
+      params: { status, ...pageQuery(params) },
+    });
+    return resolveListResult<Maintenance>(res.data, params);
   },
   create: async (data: {
     carId: string;

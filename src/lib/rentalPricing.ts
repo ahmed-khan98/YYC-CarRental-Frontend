@@ -48,12 +48,22 @@ export function isValidRentalPeriod(
   return returnDt.getTime() > pickup.getTime();
 }
 
+/** True when now is still before the booking pickup date and time. */
+export function isBeforePickup(
+  pickupDate: string,
+  pickupTime = "10:00",
+  now = new Date(),
+): boolean {
+  return now.getTime() < combineDateAndTime(pickupDate, pickupTime).getTime();
+}
+
 export function formatRentalDays(days: number): string {
   return days === 1 ? "1 day" : `${days} days`;
 }
 
 export function formatMoney(amount: number): string {
-  return Number.isInteger(amount) ? `$${amount}` : `$${amount.toFixed(2)}`;
+  const rounded = Math.round(amount * 100) / 100;
+  return Number.isInteger(rounded) ? `$${rounded}` : `$${rounded.toFixed(2)}`;
 }
 
 export const TAX_RATE = 0.05;

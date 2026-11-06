@@ -1,3 +1,5 @@
+import { format } from "date-fns";
+
 /** Business timezone — Calgary, Alberta (Mountain Time). */
 export const APP_TIMEZONE = "America/Edmonton";
 
@@ -43,4 +45,16 @@ export function formatDateAtTime(dateLabel: string, time?: string | null): strin
 export function formatDateWithTime(dateLabel: string, time?: string | null): string {
   if (!time) return dateLabel;
   return `${dateLabel} ${formatTime12h(time)}`;
+}
+
+export function formatPickupDateTime(booking: { pickupDate: string; pickupTime?: string | null }) {
+  const date = format(new Date(booking.pickupDate), "MMM d, yyyy");
+  const time = booking.pickupTime ? ` ${formatTime12h(booking.pickupTime)}` : "";
+  return `${date}${time}`;
+}
+
+export function formatDropoffDateTime(booking: { returnDate: string; returnTime?: string | null }) {
+  const date = format(new Date(booking.returnDate), "MMM d, yyyy");
+  const time = booking.returnTime ? ` ${formatTime12h(booking.returnTime)}` : "";
+  return `${date}${time}`;
 }

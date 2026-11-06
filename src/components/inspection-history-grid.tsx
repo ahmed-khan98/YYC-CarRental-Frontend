@@ -3,6 +3,7 @@ import type { Booking, BookingActorInfo, VehicleInspection } from "@/types/index
 import { formatAppDateTime } from "@/lib/timeFormat.ts";
 import { inspectionMediaUrls, resolveMediaUrl } from "@/lib/mediaUrl.ts";
 import { BookingActorValue } from "@/components/booking-actor-value.tsx";
+import { CheckoutMileageStats, MileageStatTile } from "@/components/checkout-mileage-stats.tsx";
 import { SignedCheckInPdfLink } from "@/components/signed-check-in-pdf-link.tsx";
 import { InspectionMediaGallery } from "@/components/inspection-media.tsx";
 import { CustomerVisibilityToggle } from "@/components/check-in-out.tsx";
@@ -79,10 +80,16 @@ function InspectionRecordCard({
   inspection,
   booking,
   performedBy,
+  checkoutMileage,
 }: {
   inspection: VehicleInspection;
   booking?: Booking;
   performedBy?: BookingActorInfo | null;
+  checkoutMileage?: {
+    checkInMileage?: number | null;
+    dailyMileageLimit?: number | null;
+    rentalDays?: number;
+  };
 }) {
   const isCheckIn = inspection.type === "check_in";
   const mediaUrls = inspectionMediaUrls(inspection);
@@ -129,21 +136,27 @@ function InspectionRecordCard({
       </div>
 
       <div className="grid grid-cols-2 gap-1.5">
-        <div className="bg-background/50 rounded-lg px-2.5 py-2 border border-border/30">
-          <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-0.5">
-            <Gauge className="h-3 w-3" /> Mileage
-          </div>
-          <p className="text-sm font-semibold">{inspection.mileage.toLocaleString()} km</p>
-        </div>
-        <div className="bg-background/50 rounded-lg px-2.5 py-2 border border-border/30">
-          <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-0.5">
-            <Fuel className="h-3 w-3" /> Fuel Level
-          </div>
-          <p className="text-sm font-semibold">
-            {FUEL_LABELS[inspection.fuelLevel] ?? inspection.fuelLevel}
-          </p>
-        </div>
+        <MileageStatTile
+          icon={<Gauge className="h-3 w-3" />}
+          label="Mileage"
+          value={`${inspection.mileage.toLocaleString()} km`}
+        />
+        <MileageStatTile
+          icon={<Fuel className="h-3 w-3" />}
+          label="Fuel Level"
+          value={FUEL_LABELS[inspection.fuelLevel] ?? inspection.fuelLevel}
+        />
       </div>
+
+      {!isCheckIn && (
+        <CheckoutMileageStats
+          checkInMileage={checkoutMileage?.checkInMileage}
+          checkOutMileage={inspection.mileage}
+          dailyMileageLimit={checkoutMileage?.dailyMileageLimit}
+          rentalDays={checkoutMileage?.rentalDays}
+          booking={booking}
+        />
+      )}
 
       {isCheckIn && inspection.mainDriver && (
         <div className="space-y-2">
@@ -210,7 +223,7 @@ function InspectionRecordCard({
         </div>
       )}
 
-      <SignedCheckInPdfLink inspectionId={inspection._id}>
+      <SignedCheckInPdfLink inspectionId={inspection._id} signedPdfUrl={inspection.signedPdfUrl}>
         {isCheckIn ? "View check-in agreement (PDF)" : "View check-out agreement (PDF)"}
       </SignedCheckInPdfLink>
 
@@ -277,6 +290,9 @@ type InspectionHistoryGridProps = {
   booking?: Booking;
   checkInPerformedBy?: BookingActorInfo | null;
   checkOutPerformedBy?: BookingActorInfo | null;
+  dailyMileageLimit?: number | null;
+  rentalDays?: number;
+  checkInMileage?: number | null;
 };
 
 export function InspectionHistoryGrid({
@@ -287,6 +303,9 @@ export function InspectionHistoryGrid({
   booking,
   checkInPerformedBy,
   checkOutPerformedBy,
+  dailyMileageLimit,
+  rentalDays,
+  checkInMileage,
 }: InspectionHistoryGridProps) {
   const adminMode = Boolean(booking);
   const displayCheckIn = adminMode || showCheckIn;
@@ -322,6 +341,11 @@ export function InspectionHistoryGrid({
               inspection={checkOut}
               booking={booking}
               performedBy={checkOutPerformedBy}
+              checkoutMileage={{
+                checkInMileage: checkIn?.mileage ?? checkInMileage ?? booking?.checkInMileage,
+                dailyMileageLimit,
+                rentalDays,
+              }}
             />
           ) : (
             <InspectionPlaceholder type="check_out" />

@@ -1,4 +1,5 @@
 import { apiClient } from "./client.ts";
+import { pageQuery, resolveListResult, type ListPageParams, type Paginated } from "@/lib/pagination.ts";
 import type { User, UserRole } from "@/types/index.ts";
 
 export const usersApi = {
@@ -10,13 +11,17 @@ export const usersApi = {
     const res = await apiClient.patch<User>("/users/me/profile", data);
     return res.data;
   },
-  listUsers: async () => {
-    const res = await apiClient.get<User[]>("/users");
-    return res.data;
+  listUsers: async (params?: ListPageParams): Promise<User[] | Paginated<User>> => {
+    const res = await apiClient.get<User[] | Paginated<User>>("/users", {
+      params: pageQuery(params),
+    });
+    return resolveListResult<User>(res.data, params);
   },
-  listSubAdmins: async () => {
-    const res = await apiClient.get<User[]>("/users/sub-admins");
-    return res.data;
+  listSubAdmins: async (params?: ListPageParams): Promise<User[] | Paginated<User>> => {
+    const res = await apiClient.get<User[] | Paginated<User>>("/users/sub-admins", {
+      params: pageQuery(params),
+    });
+    return resolveListResult<User>(res.data, params);
   },
   createSubAdmin: async (data: { name: string; email: string; password: string }) => {
     const res = await apiClient.post<User>("/users/sub-admins", data);
@@ -29,12 +34,17 @@ export const usersApi = {
     const res = await apiClient.patch<User>(`/users/sub-admins/${userId}`, data);
     return res.data;
   },
-  createCustomer: async (data: { name: string; email: string; password: string; phone?: string }) => {
+  createCustomer: async (data: { name: string; email: string; password: string; phone: string }) => {
     const res = await apiClient.post<User>("/users/customers", data);
     return res.data;
   },
-  deleteSubAdmin: async (userId: string) => {
-    await apiClient.delete(`/users/sub-admins/${userId}`);
+  // Temporary: hard delete commented out — delete button calls deactivate
+  // deleteSubAdmin: async (userId: string) => {
+  //   await apiClient.delete(`/users/sub-admins/${userId}`);
+  // },
+  deactivateSubAdmin: async (userId: string) => {
+    const res = await apiClient.patch<User>(`/users/sub-admins/${userId}/deactivate`);
+    return res.data;
   },
   setRole: async (userId: string, role: UserRole) => {
     const res = await apiClient.patch<User>(`/users/${userId}/role`, { role });

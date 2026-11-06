@@ -1,5 +1,4 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { format } from "date-fns";
 import { AlertTriangle, CalendarClock, ShieldCheck } from "lucide-react";
 import { bookingsApi } from "@/api/bookings.api.ts";
 import { getApiErrorMessage } from "@/api/client.ts";
@@ -13,24 +12,22 @@ import {
 import { Badge } from "@/components/ui/badge.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import { formatMoney } from "@/lib/rentalPricing.ts";
+import { resolvePreAuthorizedAmount } from "@/config/appConfig.ts";
 import {
-  SECURITY_DEPOSIT_AMOUNT,
   SECURITY_DEPOSIT_STATUS_LABELS,
+  SECURITY_DEPOSIT_STATUS_STYLES,
+  formatDepositDate,
 } from "@/lib/securityDeposit.ts";
-import type { SecurityDepositSummary, SecurityDepositStatus } from "@/types/index.ts";
+import type { SecurityDepositSummary } from "@/types/index.ts";
 import { toast } from "sonner";
 
-const STATUS_STYLES: Record<SecurityDepositStatus, string> = {
-  held: "bg-blue-500/20 text-blue-400 border-blue-500/30",
-  partially_used: "bg-amber-500/20 text-amber-400 border-amber-500/30",
-  refunded: "bg-green-500/20 text-green-400 border-green-500/30",
-};
-
-function formatDepositDate(value?: string | null) {
-  if (!value) return null;
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return null;
-  return format(date, "MMM d, yyyy");
+function DepositStatTile({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg border border-border/40 bg-muted/20 px-1.5 py-2 text-center">
+      <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</p>
+      <p className="mt-0.5 text-sm font-semibold tabular-nums">{value}</p>
+    </div>
+  );
 }
 
 type AdminSecurityDepositPanelProps = {
@@ -40,7 +37,7 @@ type AdminSecurityDepositPanelProps = {
 
 export function AdminSecurityDepositPanel({ bookingId, deposit }: AdminSecurityDepositPanelProps) {
   const queryClient = useQueryClient();
-  const amount = deposit?.amount ?? SECURITY_DEPOSIT_AMOUNT;
+  const amount = resolvePreAuthorizedAmount(deposit?.amount);
   const collected = deposit?.collected ?? false;
   const status = deposit?.status ?? null;
   const refundedOn = formatDepositDate(deposit?.refundedAt);
@@ -79,7 +76,7 @@ export function AdminSecurityDepositPanel({ bookingId, deposit }: AdminSecurityD
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <SectionTitle icon={<ShieldCheck className="h-4 w-4" />} title="Security Deposit" />
           {status ? (
-            <Badge className={`text-xs border capitalize h-7 px-2.5 ${STATUS_STYLES[status]}`}>
+            <Badge className={`text-xs border capitalize h-7 px-2.5 ${SECURITY_DEPOSIT_STATUS_STYLES[status]}`}>
               {SECURITY_DEPOSIT_STATUS_LABELS[status]}
             </Badge>
           ) : (
@@ -92,27 +89,20 @@ export function AdminSecurityDepositPanel({ bookingId, deposit }: AdminSecurityD
       <BookingDetailCardContent className="space-y-2.5">
         {!collected && (
           <p className="text-xs text-muted-foreground leading-snug">
-            A ${SECURITY_DEPOSIT_AMOUNT} pre-authorization is collected at check-in. It is separate from the rental payment.
+            A {formatMoney(amount)} pre-authorization is collected at check-in. It is separate from the rental payment.
           </p>
         )}
 
         <div className="grid grid-cols-3 gap-1.5">
-          <div className="rounded-lg border border-border/40 bg-muted/20 px-1.5 py-2 text-center">
-            <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Total</p>
-            <p className="mt-0.5 text-sm font-semibold tabular-nums">{formatMoney(amount)}</p>
-          </div>
-          <div className="rounded-lg border border-border/40 bg-muted/20 px-1.5 py-2 text-center">
-            <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Deducted</p>
-            <p className="mt-0.5 text-sm font-semibold tabular-nums">
-              {formatMoney(collected ? deposit?.deductedAmount ?? 0 : 0)}
-            </p>
-          </div>
-          <div className="rounded-lg border border-border/40 bg-muted/20 px-1.5 py-2 text-center">
-            <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Remaining</p>
-            <p className="mt-0.5 text-sm font-semibold tabular-nums">
-              {formatMoney(collected ? deposit?.remainingAmount ?? amount : amount)}
-            </p>
-          </div>
+          <DepositStatTile label="Total" value={formatMoney(amount)} />
+          <DepositStatTile
+            label="Deducted"
+            value={formatMoney(collected ? deposit?.deductedAmount ?? 0 : 0)}
+          />
+          <DepositStatTile
+            label="Remaining"
+            value={formatMoney(collected ? deposit?.remainingAmount ?? amount : amount)}
+          />
         </div>
         {status === "refunded" && (
           <InfoRow

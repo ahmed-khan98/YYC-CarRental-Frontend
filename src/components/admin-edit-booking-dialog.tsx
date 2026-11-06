@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAutoSelectSingleLocation } from "@/hooks/use-auto-select-single-location.ts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { format, parseISO } from "date-fns";
 import { bookingsApi } from "@/api/bookings.api.ts";
 import { usersApi } from "@/api/users.api.ts";
 import { carsApi } from "@/api/cars.api.ts";
@@ -17,65 +16,28 @@ import { Label } from "@/components/ui/label.tsx";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog.tsx";
 import { toast } from "sonner";
 import { getApiErrorMessage } from "@/api/client.ts";
+import { listItems } from "@/lib/pagination.ts";
 import { isValidRentalPeriod } from "@/lib/rentalPricing.ts";
+import { todayYmd } from "@/lib/bookingWindow.ts";
 import { patchText } from "@/lib/patchPayload.ts";
 import {
-  bookingToServicesFormState,
   buildServicesPayload,
   setBookingExtraDriverName,
   setBookingServiceQuantity,
   toggleBookingService,
   validateBookingExtraDrivers,
-  type BookingServicesFormState,
 } from "@/lib/bookingServicesState.ts";
 import { computeAdminEditBookingQuote } from "@/lib/adminEditBookingQuote.ts";
 import { formatTime12h } from "@/lib/timeFormat.ts";
-
-const ADMIN_STATUS_OPTIONS = ["pending", "confirmed", "completed", "cancelled"] as const;
-const STATUS_OPTIONS = ["pending", "confirmed", "checked_in", "checked_out", "completed", "cancelled"] as const;
-const PAYMENT_OPTIONS = ["pending", "paid", "refunded"] as const;
-
-const TIME_OPTIONS = [
-  "06:00", "07:00", "08:00", "09:00", "10:00", "11:00", "12:00",
-  "13:00", "14:00", "15:00", "16:00", "17:00", "18:00", "19:00", "20:00", "21:00",
-];
-
-type EditForm = {
-  carId: string;
-  pickupLocationId: string;
-  dropoffLocationId: string;
-  pickupDate: string;
-  pickupTime: string;
-  returnDate: string;
-  returnTime: string;
-  notes: string;
-  paymentStatus: "pending" | "paid" | "refunded";
-  status: BookingStatus;
-} & BookingServicesFormState;
-
-function toDateInput(iso: string) {
-  try {
-    return format(parseISO(iso), "yyyy-MM-dd");
-  } catch {
-    return iso.slice(0, 10);
-  }
-}
-
-function bookingToEditForm(booking: Booking): EditForm {
-  return {
-    carId: booking.carId,
-    pickupLocationId: booking.pickupLocationId,
-    dropoffLocationId: booking.dropoffLocationId,
-    pickupDate: toDateInput(booking.pickupDate),
-    pickupTime: booking.pickupTime ?? "10:00",
-    returnDate: toDateInput(booking.returnDate),
-    returnTime: booking.returnTime ?? "10:00",
-    notes: booking.notes ?? "",
-    paymentStatus: booking.paymentStatus ?? "pending",
-    status: booking.status,
-    ...bookingToServicesFormState(booking),
-  };
-}
+import { formatCustomerLabel } from "@/lib/customerLabel.ts";
+import {
+  ADMIN_BOOKING_STATUS_OPTIONS,
+  ADMIN_EDIT_PAYMENT_OPTIONS,
+  ADMIN_EDIT_STATUS_OPTIONS,
+  ADMIN_EDIT_TIME_OPTIONS,
+  bookingToEditForm,
+  type AdminEditBookingForm,
+} from "@/lib/adminEditBookingForm.ts";
 
 type AdminEditBookingDialogProps = {
   booking: Booking | null;
@@ -85,13 +47,6 @@ type AdminEditBookingDialogProps = {
   onSuccess?: () => void;
 };
 
-function formatCustomerLabel(customer?: Pick<User, "name" | "email"> | null) {
-  if (!customer) return "—";
-  return customer.email
-    ? `${customer.name ?? "Unknown"} — ${customer.email}`
-    : (customer.name ?? "Unknown");
-}
-
 export function AdminEditBookingDialog({
   booking,
   customer: customerProp,
@@ -100,29 +55,34 @@ export function AdminEditBookingDialog({
   onSuccess,
 }: AdminEditBookingDialogProps) {
   const queryClient = useQueryClient();
-  const [editForm, setEditForm] = useState<EditForm | null>(null);
+  const today = todayYmd();
+  const [editForm, setEditForm] = useState<AdminEditBookingForm | null>(null);
   const [saving, setSaving] = useState(false);
 
-  const { data: users } = useQuery({
+  const { data: usersResult } = useQuery({
     queryKey: ["users"],
     queryFn: () => usersApi.listUsers(),
     enabled: open && !customerProp,
   });
-  const { data: cars } = useQuery({
+  const { data: carsResult } = useQuery({
     queryKey: ["cars", { includeDeactivated: true }],
     queryFn: () => carsApi.list({ includeDeactivated: true }),
     enabled: open,
   });
-  const { data: locations } = useQuery({
+  const { data: locationsResult } = useQuery({
     queryKey: ["locations", { activeOnly: true }],
     queryFn: () => locationsApi.list(true),
     enabled: open,
   });
-  const { data: services } = useQuery({
+  const { data: servicesResult } = useQuery({
     queryKey: ["services", { activeOnly: true }],
     queryFn: () => servicesApi.list(true),
     enabled: open,
   });
+  const users = listItems(usersResult);
+  const cars = listItems(carsResult);
+  const locations = listItems(locationsResult);
+  const services = listItems(servicesResult);
 
   const adminUpdate = useMutation({
     mutationFn: ({ bookingId, data }: { bookingId: string; data: Parameters<typeof bookingsApi.adminUpdate>[1] }) =>
@@ -224,7 +184,7 @@ export function AdminEditBookingDialog({
           ...servicesPayload,
           notes: patchText(editForm.notes),
           paymentStatus: editForm.paymentStatus,
-          status: ADMIN_STATUS_OPTIONS.includes(editForm.status as typeof ADMIN_STATUS_OPTIONS[number])
+          status: ADMIN_EDIT_STATUS_OPTIONS.includes(editForm.status as typeof ADMIN_EDIT_STATUS_OPTIONS[number])
             ? editForm.status
             : undefined,
         },
@@ -290,7 +250,7 @@ export function AdminEditBookingDialog({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1.5 min-w-0">
                   <Label className="text-xs">Pickup Date</Label>
-                  <Input type="date" className="w-full" value={editForm.pickupDate} onChange={(e) => setEditForm((f) => f && { ...f, pickupDate: e.target.value })} />
+                  <Input type="date" className="w-full" min={today} value={editForm.pickupDate} onChange={(e) => setEditForm((f) => f && { ...f, pickupDate: e.target.value })} />
                 </div>
                 <div className="space-y-1.5 min-w-0">
                   <Label className="text-xs">Pickup Time</Label>
@@ -301,7 +261,7 @@ export function AdminEditBookingDialog({
                     <SelectTrigger className="w-full">
                       <SelectValue>{formatTime12h(editForm.pickupTime || "10:00")}</SelectValue>
                     </SelectTrigger>
-                    <SelectContent>{TIME_OPTIONS.map((t) => <SelectItem key={t} value={t}>{formatTime12h(t)}</SelectItem>)}</SelectContent>
+                    <SelectContent>{ADMIN_EDIT_TIME_OPTIONS.map((t) => <SelectItem key={t} value={t}>{formatTime12h(t)}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
               </div>
@@ -319,7 +279,7 @@ export function AdminEditBookingDialog({
                     <SelectTrigger className="w-full">
                       <SelectValue>{formatTime12h(editForm.returnTime || "10:00")}</SelectValue>
                     </SelectTrigger>
-                    <SelectContent>{TIME_OPTIONS.map((t) => <SelectItem key={t} value={t}>{formatTime12h(t)}</SelectItem>)}</SelectContent>
+                    <SelectContent>{ADMIN_EDIT_TIME_OPTIONS.map((t) => <SelectItem key={t} value={t}>{formatTime12h(t)}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
               </div>
@@ -332,7 +292,7 @@ export function AdminEditBookingDialog({
                   >
                     <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      {STATUS_OPTIONS.map((s) => (
+                      {ADMIN_BOOKING_STATUS_OPTIONS.map((s) => (
                         <SelectItem key={s} value={s} disabled={s === "checked_in" || s === "checked_out"} className="capitalize">
                           {s.replace(/_/g, " ")}
                         </SelectItem>
@@ -344,11 +304,11 @@ export function AdminEditBookingDialog({
                   <Label className="text-xs">Payment Status</Label>
                   <Select
                     value={editForm.paymentStatus}
-                    onValueChange={(v) => setEditForm((f) => f && { ...f, paymentStatus: v as EditForm["paymentStatus"] })}
+                    onValueChange={(v) => setEditForm((f) => f && { ...f, paymentStatus: v as AdminEditBookingForm["paymentStatus"] })}
                   >
                     <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      {PAYMENT_OPTIONS.map((p) => <SelectItem key={p} value={p} className="capitalize">{p}</SelectItem>)}
+                      {ADMIN_EDIT_PAYMENT_OPTIONS.map((p) => <SelectItem key={p} value={p} className="capitalize">{p}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>

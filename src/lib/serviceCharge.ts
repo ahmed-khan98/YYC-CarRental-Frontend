@@ -16,6 +16,10 @@ export function formatServiceRateLabel(service: ServiceLike): string {
   return service.chargeType === "per_trip" ? `$${rate}/trip` : `$${rate}/day`;
 }
 
+export function chargeTypeLabel(chargeType?: ServiceChargeType) {
+  return chargeType === "per_trip" ? "Per trip" : "Per day";
+}
+
 export function formatServiceChargeBreakdown(
   service: ServiceLike,
   days: number,

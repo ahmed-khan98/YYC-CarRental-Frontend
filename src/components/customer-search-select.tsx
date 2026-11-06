@@ -12,14 +12,7 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover.tsx";
 import { cn } from "@/lib/utils.ts";
 import { Check, ChevronsUpDown } from "lucide-react";
-
-function customerLabel(customer: User) {
-  return `${customer.name ?? "Unknown"} — ${customer.email ?? "No email"}`;
-}
-
-function customerSearchValue(customer: User) {
-  return [customer.name, customer.email, customer.phone].filter(Boolean).join(" ");
-}
+import { customerLabel, customerSearchValue } from "@/lib/customerLabel.ts";
 
 type CustomerSearchSelectProps = {
   customers: User[];
@@ -27,6 +20,8 @@ type CustomerSearchSelectProps = {
   onChange: (userId: string) => void;
   placeholder?: string;
   disabled?: boolean;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 };
 
 export function CustomerSearchSelect({
@@ -35,8 +30,12 @@ export function CustomerSearchSelect({
   onChange,
   placeholder = "Select a customer",
   disabled = false,
+  open: controlledOpen,
+  onOpenChange,
 }: CustomerSearchSelectProps) {
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = controlledOpen ?? internalOpen;
+  const setOpen = onOpenChange ?? setInternalOpen;
   const selected = customers.find((customer) => customer._id === value);
 
   return (
@@ -64,7 +63,7 @@ export function CustomerSearchSelect({
         align="start"
       >
         <Command>
-          <CommandInput placeholder="Search by name or email..." />
+          <CommandInput />
           <CommandList>
             <CommandEmpty>No customer found.</CommandEmpty>
             <CommandGroup>
@@ -83,7 +82,14 @@ export function CustomerSearchSelect({
                       value === customer._id ? "opacity-100" : "opacity-0",
                     )}
                   />
-                  <span className="truncate">{customerLabel(customer)}</span>
+                  <span className="min-w-0">
+                    <span className="block truncate">{customerLabel(customer)}</span>
+                    {customer.phone ? (
+                      <span className="block truncate text-xs text-muted-foreground">
+                        {customer.phone}
+                      </span>
+                    ) : null}
+                  </span>
                 </CommandItem>
               ))}
             </CommandGroup>
