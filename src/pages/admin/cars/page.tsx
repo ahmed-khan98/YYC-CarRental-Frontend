@@ -36,6 +36,7 @@ import {
   formatVehicleCategoryLabel,
   type DisplayVehicleCategory,
 } from "@/lib/vehicleCategories.ts";
+import { listItems } from "@/lib/pagination.ts";
 
 type Transmission = Car["transmission"];
 type FuelType = Car["fuelType"];
@@ -99,13 +100,14 @@ export default function AdminCarsPage() {
   const mainImageRef = useRef<HTMLInputElement>(null);
   const additionalImagesRef = useRef<HTMLInputElement>(null);
 
-  const filtered = useMemo(() => (cars ?? []).filter((c) => {
+  const carList = listItems(cars);
+  const filtered = useMemo(() => carList.filter((c) => {
     const matchesSearch = `${c.make} ${c.model} ${c.licensePlate}`
       .toLowerCase()
       .includes(search.toLowerCase());
     const matchesCategory = categoryFilter === "all" || c.category === categoryFilter;
     return matchesSearch && matchesCategory;
-  }), [cars, search, categoryFilter]);
+  }), [carList, search, categoryFilter]);
 
   const resetImageState = () => {
     setMainImage(null);
@@ -361,7 +363,7 @@ export default function AdminCarsPage() {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h2 className="text-2xl font-bold">Cars</h2>
-          <p className="text-muted-foreground text-sm">{cars?.length ?? 0} total vehicles</p>
+          <p className="text-muted-foreground text-sm">{carList.length} total vehicles</p>
         </div>
         <Button onClick={openCreate} className="cursor-pointer">
           <Plus className="h-4 w-4 mr-2" /> Add Car
