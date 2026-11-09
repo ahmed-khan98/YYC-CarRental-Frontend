@@ -1,4 +1,3 @@
-import { format } from "date-fns";
 import { memo, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -16,6 +15,7 @@ import { BookingDropoffCell, BookingPickupCell } from "@/components/booking-sche
 import { CheckoutMileageStats } from "@/components/checkout-mileage-stats.tsx";
 import { InspectionMediaGallery } from "@/components/inspection-media.tsx";
 import { inspectionMediaUrls } from "@/lib/mediaUrl.ts";
+import { formatAppTime } from "@/lib/timeFormat.ts";
 import { Card, CardContent } from "@/components/ui/card.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import { Badge } from "@/components/ui/badge.tsx";
@@ -65,7 +65,7 @@ const InspectionDateRow = memo(function InspectionDateRow({
                 {inspection.type.replace("_", " ")}
               </Badge>
               <span className="text-xs text-muted-foreground">
-                {format(new Date(inspection._creationTime), "h:mm a")}
+                {formatAppTime(inspection._creationTime)}
               </span>
             </div>
             <div className="flex items-center gap-2 text-xs text-muted-foreground flex-wrap">

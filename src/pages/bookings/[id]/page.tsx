@@ -19,7 +19,6 @@ import {
 import { CustomerBookingDetailSkeleton } from "@/components/page-skeleton.tsx";
 import { SignInButton } from "@/components/ui/signin.tsx";
 import { motion } from "motion/react";
-import { format } from "date-fns";
 import { formatRentalDays } from "@/lib/rentalPricing.ts";
 import { computeBillSummary } from "@/lib/billing.ts";
 import { CancelledAmountDueBanner } from "@/components/cancelled-amount-due.tsx";
@@ -27,7 +26,7 @@ import { BookingBillPanel } from "@/components/booking-bill-panel.tsx";
 import { calculateServiceCharge, formatServiceRateLabel } from "@/lib/serviceCharge.ts";
 import { isExtraDriverService } from "@/lib/extraDriver.ts";
 import { isUnlimitedMileageService } from "@/lib/unlimitedMileage.ts";
-import { formatAppDateTime, formatTime12h } from "@/lib/timeFormat.ts";
+import { formatAppDateTime, formatBookingDate, formatTime12h } from "@/lib/timeFormat.ts";
 import { BookingStatusStepper } from "@/components/booking-status-stepper.tsx";
 import { carPrimaryImage } from "@/lib/mediaUrl.ts";
 import { bookingVehicle } from "@/lib/displayName.ts";
@@ -212,7 +211,7 @@ function BookingDetailInner({ bookingId }: { bookingId: string }) {
                 value={
                   <span className="flex items-center gap-1 justify-end">
                     <Calendar className="h-3.5 w-3.5 text-primary shrink-0" />
-                    {format(new Date(booking.pickupDate), "MMM d, yyyy")}
+                    {formatBookingDate(booking.pickupDate)}
                     {booking.pickupTime && (
                       <span className="text-muted-foreground"> {formatTime12h(booking.pickupTime)}</span>
                     )}
@@ -224,7 +223,7 @@ function BookingDetailInner({ bookingId }: { bookingId: string }) {
                 value={
                   <span className="flex items-center gap-1 justify-end">
                     <Calendar className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                    {format(new Date(booking.returnDate), "MMM d, yyyy")}
+                    {formatBookingDate(booking.returnDate)}
                     {booking.returnTime && (
                       <span className="text-muted-foreground"> {formatTime12h(booking.returnTime)}</span>
                     )}

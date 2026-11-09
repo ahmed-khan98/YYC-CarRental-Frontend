@@ -1,3 +1,6 @@
+import { addDaysYmd, todayYmd } from "@/lib/bookingWindow.ts";
+import { asBookingYmd } from "@/lib/timeFormat.ts";
+
 export type DatePreset = "today" | "week" | "month" | "custom";
 
 export const DATE_PRESETS: { value: DatePreset; label: string }[] = [
@@ -7,37 +10,26 @@ export const DATE_PRESETS: { value: DatePreset; label: string }[] = [
   { value: "custom", label: "Custom" },
 ];
 
-export function formatInputDate(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
-
 export function rangeForPreset(preset: Exclude<DatePreset, "custom">): { start: string; end: string } {
-  const now = new Date();
+  const today = todayYmd();
   if (preset === "today") {
-    const key = formatInputDate(now);
-    return { start: key, end: key };
+    return { start: today, end: today };
   }
   if (preset === "week") {
-    const start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - now.getDay());
-    const end = new Date(start);
-    end.setDate(start.getDate() + 6);
-    return { start: formatInputDate(start), end: formatInputDate(end) };
+    const [year, month, day] = today.split("-").map(Number);
+    const dow = new Date(Date.UTC(year, month - 1, day)).getUTCDay();
+    const start = addDaysYmd(today, -dow);
+    return { start, end: addDaysYmd(start, 6) };
   }
-  const start = new Date(now.getFullYear(), now.getMonth(), 1);
-  const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-  return { start: formatInputDate(start), end: formatInputDate(end) };
+  const [year, month] = today.split("-").map(Number);
+  const start = `${year}-${String(month).padStart(2, "0")}-01`;
+  const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  const end = `${year}-${String(month).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
+  return { start, end };
 }
 
 export function pickupDateKey(value: string): string {
-  const raw = String(value ?? "");
-  const match = raw.match(/^(\d{4}-\d{2}-\d{2})/);
-  if (match) return match[1];
-  const d = new Date(raw);
-  if (Number.isNaN(d.getTime())) return "";
-  return formatInputDate(d);
+  return asBookingYmd(value);
 }
 
 export function orderedDateRange(start: string, end: string): { from: string; to: string } {

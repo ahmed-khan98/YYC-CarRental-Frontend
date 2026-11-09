@@ -1,9 +1,9 @@
-import { format, parseISO } from "date-fns";
 import type { Booking, BookingStatus } from "@/types/index.ts";
 import {
   bookingToServicesFormState,
   type BookingServicesFormState,
 } from "@/lib/bookingServicesState.ts";
+import { asBookingYmd } from "@/lib/timeFormat.ts";
 
 export const ADMIN_EDIT_STATUS_OPTIONS = ["pending", "confirmed", "completed", "cancelled"] as const;
 export const ADMIN_BOOKING_STATUS_OPTIONS = ["pending", "confirmed", "checked_in", "checked_out", "completed", "cancelled"] as const;
@@ -27,12 +27,8 @@ export type AdminEditBookingForm = {
   status: BookingStatus;
 } & BookingServicesFormState;
 
-export function toDateInput(iso: string) {
-  try {
-    return format(parseISO(iso), "yyyy-MM-dd");
-  } catch {
-    return iso.slice(0, 10);
-  }
+export function toDateInput(value: string) {
+  return asBookingYmd(value) || String(value ?? "").slice(0, 10);
 }
 
 export function bookingToEditForm(booking: Booking): AdminEditBookingForm {

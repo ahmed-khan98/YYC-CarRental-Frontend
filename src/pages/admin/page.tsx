@@ -7,7 +7,7 @@ import { Car, CalendarCheck, Users, MapPin, TrendingUp, Clock } from "lucide-rea
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button.tsx";
 import { Badge } from "@/components/ui/badge.tsx";
-import { format } from "date-fns";
+import { formatBookingDate } from "@/lib/timeFormat.ts";
 import { formatCarName } from "@/lib/displayName.ts";
 
 const STATUS_COLORS: Record<string, string> = {
@@ -88,7 +88,7 @@ export default function AdminOverview() {
                     <p className="text-xs text-muted-foreground truncate">
                       {car?.licensePlate ? <span className="font-mono">{car.licensePlate}</span> : null}
                       {car?.licensePlate ? " · " : ""}
-                      {format(new Date(b.pickupDate), "MMM d")} — ${b.totalAmount}
+                      {formatBookingDate(b.pickupDate, "short")} — ${b.totalAmount}
                     </p>
                   </div>
                   <Badge className={`text-xs border capitalize shrink-0 ${STATUS_COLORS[b.status] ?? ""}`}>

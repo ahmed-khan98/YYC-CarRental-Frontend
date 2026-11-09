@@ -14,13 +14,12 @@ import { useAutoSelectSingleLocation } from "@/hooks/use-auto-select-single-loca
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select.tsx";
 import { Label } from "@/components/ui/label.tsx";
 import { DatePicker } from "@/components/date-picker.tsx";
-import { format } from "date-fns";
 import {
   formatVehicleCategoryLabel,
   VEHICLE_TYPE_OPTIONS,
 } from "@/lib/vehicleCategories.ts";
 import { formatTime12h } from "@/lib/timeFormat.ts";
-import { todayYmd } from "@/lib/bookingWindow.ts";
+import { addDaysYmd, todayYmd } from "@/lib/bookingWindow.ts";
 import { carsApi } from "@/api/cars.api.ts";
 import { getApiErrorMessage } from "@/api/client.ts";
 import { toast } from "sonner";
@@ -183,7 +182,7 @@ export default function Index() {
   const locations = listItems(locationsResult);
 
   const today = todayYmd();
-  const tomorrow = format(new Date(Date.now() + 86400000), "yyyy-MM-dd");
+  const tomorrow = addDaysYmd(today, 1);
 
   const [pickupLocation, setPickupLocation] = useState("");
   const [dropoffLocation, setDropoffLocation] = useState("");

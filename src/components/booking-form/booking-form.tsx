@@ -1,7 +1,6 @@
 import { memo, useCallback, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { format } from "date-fns";
 import { motion } from "motion/react";
 import { CheckCircle2 } from "lucide-react";
 import { carsApi } from "@/api/cars.api.ts";
@@ -25,7 +24,7 @@ import { toast } from "sonner";
 import { carPrimaryImage } from "@/lib/mediaUrl.ts";
 import { validateBookingForm } from "@/components/booking-form/validateBookingForm.ts";
 import { resizeNameList } from "@/lib/bookingServicesState.ts";
-import { todayYmd } from "@/lib/bookingWindow.ts";
+import { addDaysYmd, todayYmd } from "@/lib/bookingWindow.ts";
 
 const CAR_IMAGES: Record<string, string> = {
   economy: "https://images.unsplash.com/photo-1690278289651-895463644114?w=600&q=80",
@@ -97,7 +96,7 @@ export function BookingForm({ carId }: BookingFormProps) {
   });
 
   const today = useMemo(() => todayYmd(), []);
-  const tomorrow = useMemo(() => format(new Date(Date.now() + 86400000), "yyyy-MM-dd"), []);
+  const tomorrow = useMemo(() => addDaysYmd(today, 1), [today]);
 
   const [pickupDate, setPickupDate] = useState(() => searchParams.get("pickupDate") ?? today);
   const [pickupTime, setPickupTime] = useState(() => searchParams.get("pickupTime") ?? "10:00");
@@ -214,9 +213,9 @@ export function BookingForm({ carId }: BookingFormProps) {
         carId,
         pickupLocationId,
         dropoffLocationId,
-        pickupDate: new Date(pickupDate).toISOString(),
+        pickupDate,
         pickupTime,
-        returnDate: new Date(returnDate).toISOString(),
+        returnDate,
         returnTime,
         additionalServiceIds: selectedServices,
         serviceQuantities: selectedServices.map((serviceId) => ({

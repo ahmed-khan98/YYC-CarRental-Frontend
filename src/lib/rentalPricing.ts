@@ -1,10 +1,13 @@
+import { asBookingYmd } from "@/lib/timeFormat.ts";
+
 const MS_PER_HOUR = 60 * 60 * 1000;
 const MS_PER_DAY = 24 * MS_PER_HOUR;
 
 export function combineDateAndTime(dateInput: string | Date, timeStr = "00:00"): Date {
-  const date = new Date(dateInput);
-  const [hours, minutes] = timeStr.split(":").map(Number);
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate(), hours, minutes ?? 0, 0, 0);
+  const ymd = asBookingYmd(dateInput);
+  const [year, month, day] = (ymd || "1970-01-01").split("-").map(Number);
+  const [hours, minutes] = String(timeStr).split(":").map(Number);
+  return new Date(year, month - 1, day, hours || 0, minutes ?? 0, 0, 0);
 }
 
 /**

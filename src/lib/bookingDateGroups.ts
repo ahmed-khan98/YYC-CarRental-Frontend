@@ -1,9 +1,6 @@
-import {
-  format,
-  parseISO,
-  startOfDay,
-} from "date-fns";
 import type { Booking, VehicleInspection } from "@/types/index.ts";
+import { asBookingYmd, formatBookingDate } from "@/lib/timeFormat.ts";
+import { todayYmd } from "@/lib/bookingWindow.ts";
 
 export type DateGroupItem =
   | { kind: "booking"; booking: Booking; sortTime: number }
@@ -31,11 +28,12 @@ export function buildBookingDateGroups(
   };
 
   for (const booking of bookings) {
-    const dateKey = format(startOfDay(parseISO(booking.pickupDate)), "yyyy-MM-dd");
+    const dateKey = asBookingYmd(booking.pickupDate);
+    if (!dateKey) continue;
     addItem(dateKey, {
       kind: "booking",
       booking,
-      sortTime: parseISO(booking.pickupDate).getTime(),
+      sortTime: new Date(`${dateKey}T00:00:00`).getTime(),
     });
   }
 
@@ -44,7 +42,7 @@ export function buildBookingDateGroups(
     const booking = bookingMap.get(inspection.bookingId);
     if (!booking) continue;
 
-    const dateKey = format(new Date(inspection._creationTime), "yyyy-MM-dd");
+    const dateKey = todayYmd(new Date(inspection._creationTime));
     addItem(dateKey, {
       kind: inspection.type,
       inspection,
@@ -56,7 +54,7 @@ export function buildBookingDateGroups(
   return Array.from(groupsMap.entries())
     .map(([dateKey, items]) => ({
       dateKey,
-      label: format(parseISO(dateKey), "d MMMM yyyy"),
+      label: formatBookingDate(dateKey, "long"),
       items: [...items].sort((a, b) => a.sortTime - b.sortTime),
     }))
     .sort((a, b) => b.dateKey.localeCompare(a.dateKey));

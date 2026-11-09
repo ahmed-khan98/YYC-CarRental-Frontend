@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { format } from "date-fns";
 import { bookingsApi } from "@/api/bookings.api.ts";
 import { carsApi } from "@/api/cars.api.ts";
 import { locationsApi } from "@/api/locations.api.ts";
@@ -49,7 +48,7 @@ import {
   isValidRentalPeriod,
 } from "@/lib/rentalPricing.ts";
 import { isStaffRole } from "@/lib/roles.ts";
-import { todayYmd } from "@/lib/bookingWindow.ts";
+import { addDaysYmd, todayYmd } from "@/lib/bookingWindow.ts";
 import { formatTime12h } from "@/lib/timeFormat.ts";
 import {
   formatVehicleCategoryLabel,
@@ -93,7 +92,7 @@ const TRANSMISSIONS = ["all", "automatic", "manual"] as const;
 const FUEL_TYPES = ["all", "gasoline", "diesel", "electric", "hybrid"] as const;
 
 const today = todayYmd();
-const tomorrow = format(new Date(Date.now() + 86400000), "yyyy-MM-dd");
+const tomorrow = addDaysYmd(today, 1);
 
 function getCarImage(car: Car) {
   return carPrimaryImage(car, CAR_IMAGES[car.category] ?? CAR_IMAGES.sedan);
@@ -644,9 +643,9 @@ export function AdminCreateBookingWizard() {
         carId: selectedCarId,
         pickupLocationId,
         dropoffLocationId,
-        pickupDate: new Date(pickupDate).toISOString(),
+        pickupDate,
         pickupTime,
-        returnDate: new Date(returnDate).toISOString(),
+        returnDate,
         returnTime,
         ...servicesPayload,
         notes: notes || undefined,

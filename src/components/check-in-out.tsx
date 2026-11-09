@@ -12,8 +12,7 @@ import type { Booking, ExtraDriverCheckInDetail, FuelLevel, MainDriverCheckInDet
 import { calculateExtraMileageBilling } from "@/lib/extraMileage.ts";
 import { isUnlimitedMileageService } from "@/lib/unlimitedMileage.ts";
 import { calculateRentalDays, formatMoney, isBeforePickup } from "@/lib/rentalPricing.ts";
-import { formatDateAtTime } from "@/lib/timeFormat.ts";
-import { format } from "date-fns";
+import { formatBookingDate, formatDateAtTime } from "@/lib/timeFormat.ts";
 import { resolvePreAuthorizedAmount } from "@/config/appConfig.ts";
 import { computeBillSummary, getBillEntryTotals, projectCheckoutBalance } from "@/lib/billing.ts";
 import {
@@ -1673,7 +1672,7 @@ export function AdminCheckInOutActions({ booking }: { booking: Booking }) {
   const [checkOutOpen, setCheckOutOpen] = useState(false);
   const [earlyCheckInOpen, setEarlyCheckInOpen] = useState(false);
   const pickupLabel = formatDateAtTime(
-    format(new Date(booking.pickupDate), "MMM d, yyyy"),
+    formatBookingDate(booking.pickupDate),
     booking.pickupTime,
   );
 

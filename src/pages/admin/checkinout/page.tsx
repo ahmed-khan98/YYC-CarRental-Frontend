@@ -1,6 +1,5 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { format } from "date-fns";
 import { inspectionsApi } from "@/api/inspections.api.ts";
 import type { Booking } from "@/types/index.ts";
 import { Badge } from "@/components/ui/badge.tsx";
@@ -9,7 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs.t
 import { AdminDataTable, type AdminTableColumn } from "@/components/admin-data-table.tsx";
 import { AdminListPagination } from "@/components/admin-list-pagination.tsx";
 import { ADMIN_LIST_LIMIT, listItems, listMeta } from "@/lib/pagination.ts";
-import { formatDateWithTime } from "@/lib/timeFormat.ts";
+import { formatBookingDate, formatDateWithTime } from "@/lib/timeFormat.ts";
 import { bookingVehicle, formatCarName, formatDisplayName } from "@/lib/displayName.ts";
 import { carPrimaryImage, resolveMediaUrl } from "@/lib/mediaUrl.ts";
 import { AdminCheckInOutActions } from "@/components/check-in-out.tsx";
@@ -102,8 +101,8 @@ function BookingExpandedPanel({
             <div className="flex items-start gap-1.5">
               <Clock className="h-3 w-3 text-muted-foreground shrink-0 mt-0.5" />
               <span className="text-muted-foreground">
-                {formatDateWithTime(format(new Date(booking.pickupDate), "MMM d"), booking.pickupTime)} →{" "}
-                {formatDateWithTime(format(new Date(booking.returnDate), "MMM d"), booking.returnTime)}
+                {formatDateWithTime(formatBookingDate(booking.pickupDate, "short"), booking.pickupTime)} →{" "}
+                {formatDateWithTime(formatBookingDate(booking.returnDate, "short"), booking.returnTime)}
               </span>
             </div>
           </div>
@@ -179,8 +178,8 @@ function CheckInOutBookingTable({
       headClassName: "hidden md:table-cell",
       cell: (booking) => (
         <span className="text-xs sm:text-sm">
-          {formatDateWithTime(format(new Date(booking.pickupDate), "MMM d"), booking.pickupTime)} —{" "}
-          {formatDateWithTime(format(new Date(booking.returnDate), "MMM d, yyyy"), booking.returnTime)}
+          {formatDateWithTime(formatBookingDate(booking.pickupDate, "short"), booking.pickupTime)} —{" "}
+          {formatDateWithTime(formatBookingDate(booking.returnDate), booking.returnTime)}
         </span>
       ),
     },

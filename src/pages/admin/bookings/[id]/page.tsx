@@ -3,10 +3,9 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { bookingsApi } from "@/api/bookings.api.ts";
 import { motion } from "motion/react";
-import { format } from "date-fns";
 import { formatRentalDays } from "@/lib/rentalPricing.ts";
 import { calculateServiceCharge, formatServiceRateLabel } from "@/lib/serviceCharge.ts";
-import { formatDateAtTime } from "@/lib/timeFormat.ts";
+import { formatBookingDate, formatDateAtTime } from "@/lib/timeFormat.ts";
 import { BookingActorValue } from "@/components/booking-actor-value.tsx";
 import { AdminEditBookingDialog } from "@/components/admin-edit-booking-dialog.tsx";
 import { BookingBillPanel } from "@/components/booking-bill-panel.tsx";
@@ -282,7 +281,7 @@ export default function AdminBookingDetailPage() {
                 value={
                   <span className="flex items-center gap-1 justify-end">
                     <Calendar className="h-3.5 w-3.5 text-primary shrink-0" />
-                    {formatDateAtTime(format(new Date(booking.pickupDate), "MMM d, yyyy"), booking.pickupTime)}
+                    {formatDateAtTime(formatBookingDate(booking.pickupDate), booking.pickupTime)}
                   </span>
                 }
               />
@@ -291,7 +290,7 @@ export default function AdminBookingDetailPage() {
                 value={
                   <span className="flex items-center gap-1 justify-end">
                     <Calendar className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                    {formatDateAtTime(format(new Date(booking.returnDate), "MMM d, yyyy"), booking.returnTime)}
+                    {formatDateAtTime(formatBookingDate(booking.returnDate), booking.returnTime)}
                   </span>
                 }
               />

@@ -16,7 +16,6 @@ import { SignInButton } from "@/components/ui/signin.tsx";
 import { useAuth } from "@/hooks/use-auth.ts";
 import { toast } from "sonner";
 import { motion } from "motion/react";
-import { format } from "date-fns";
 import { Car as CarIcon, DollarSign, XCircle, CheckCircle, Clock, ChevronDown, ChevronUp, Gauge, Fuel, FileText, Camera, LogIn, LogOut, Eye } from "lucide-react";
 import { CancelBookingDialog } from "@/components/cancel-booking-dialog.tsx";
 import { InspectionMediaGallery } from "@/components/inspection-media.tsx";
@@ -25,6 +24,7 @@ import { Hint } from "@/components/ui/tooltip.tsx";
 import { carPrimaryImage, inspectionMediaUrls, resolveMediaUrl } from "@/lib/mediaUrl.ts";
 import { bookingVehicle, formatCarName } from "@/lib/displayName.ts";
 import { formatMoney } from "@/lib/rentalPricing.ts";
+import { formatAppDateTime } from "@/lib/timeFormat.ts";
 
 const STATUS_COLORS: Record<string, string> = {
   pending: "bg-yellow-500/20 text-yellow-400 border-yellow-500/30",
@@ -61,7 +61,7 @@ function InspectionHistory({ inspections }: { inspections?: VehicleInspection[] 
             )}
             <span className="text-xs font-semibold">{insp.type === "check_in" ? "Check-In" : "Check-Out"}</span>
             <span className="text-xs text-muted-foreground ml-auto">
-              {format(new Date(insp._creationTime), "MMM d, yyyy h:mm a")}
+              {formatAppDateTime(insp._creationTime)}
             </span>
           </div>
           <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-muted-foreground">
