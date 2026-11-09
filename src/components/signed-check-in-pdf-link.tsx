@@ -6,7 +6,6 @@ import { cn } from "@/lib/utils.ts";
 
 export function SignedCheckInPdfLink({
   inspectionId,
-  signedPdfUrl,
   className,
   children,
 }: {
@@ -21,7 +20,7 @@ export function SignedCheckInPdfLink({
     if (loading) return;
     setLoading(true);
     try {
-      await inspectionsApi.openSignedPdf(inspectionId, signedPdfUrl);
+      await inspectionsApi.openSignedPdf(inspectionId);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to open agreement PDF");
     } finally {

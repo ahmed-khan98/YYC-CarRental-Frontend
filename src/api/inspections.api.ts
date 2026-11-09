@@ -1,5 +1,4 @@
 import { openPdfBlob } from "@/lib/openPdf.ts";
-import { resolveMediaUrl } from "@/lib/mediaUrl.ts";
 import { pageQuery, resolveListResult, type ListPageParams, type Paginated } from "@/lib/pagination.ts";
 import { API_BASE, apiClient, getStoredToken } from "./client.ts";
 import type { Booking, ExtraDriverCheckInDetail, FuelLevel, InspectionType, MainDriverCheckInDetail, VehicleInspection } from "@/types/index.ts";
@@ -10,19 +9,6 @@ export type InspectionCreateResult = VehicleInspection & {
 };
 
 export type CheckInOutBoardStatus = "confirmed" | "checked_in" | "completed";
-
-async function fetchPdfBlob(url: string, headers?: HeadersInit): Promise<Blob | null> {
-  if (!url) return null;
-  try {
-    const response = await fetch(url, { headers });
-    if (!response.ok) return null;
-    const blob = await response.blob();
-    const header = await blob.slice(0, 5).text();
-    return header.startsWith("%PDF") ? blob : null;
-  } catch {
-    return null;
-  }
-}
 
 export const inspectionsApi = {
   create: async (data: {
@@ -97,16 +83,8 @@ export const inspectionsApi = {
   getSignedPdfUrl: (inspectionId: string) => {
     return `${API_BASE}/inspections/signed-pdf/${inspectionId}`;
   },
-  openSignedPdf: async (inspectionId: string, signedPdfUrl?: string | null) => {
+  openSignedPdf: async (inspectionId: string) => {
     const filename = `agreement-${inspectionId}.pdf`;
-    if (signedPdfUrl) {
-      const stored = await fetchPdfBlob(resolveMediaUrl(signedPdfUrl));
-      if (stored) {
-        openPdfBlob(stored, filename);
-        return;
-      }
-    }
-
     const token = getStoredToken();
     const response = await fetch(inspectionsApi.getSignedPdfUrl(inspectionId), {
       headers: token ? { Authorization: `Bearer ${token}` } : {},

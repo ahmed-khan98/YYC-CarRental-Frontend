@@ -1,9 +1,9 @@
-import { format } from "date-fns";
 import type { BookingActor } from "@/lib/bookingActor.ts";
 import { roleLabel } from "@/lib/roles.ts";
 import { Badge } from "@/components/ui/badge.tsx";
 import { cn } from "@/lib/utils.ts";
 import { formatActorDisplayName } from "@/lib/displayName.ts";
+import { formatAppDateTime } from "@/lib/timeFormat.ts";
 
 export function BookingActorValue({
   actor,
@@ -44,7 +44,7 @@ export function BookingActorValue({
       </span>
       {timestamp != null && !compact && (
         <span className="block text-xs text-muted-foreground mt-0.5">
-          {format(new Date(timestamp), "MMM d, yyyy 'at' h:mm a")}
+          {formatAppDateTime(timestamp)}
         </span>
       )}
     </span>

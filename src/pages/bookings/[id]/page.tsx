@@ -27,7 +27,7 @@ import { BookingBillPanel } from "@/components/booking-bill-panel.tsx";
 import { calculateServiceCharge, formatServiceRateLabel } from "@/lib/serviceCharge.ts";
 import { isExtraDriverService } from "@/lib/extraDriver.ts";
 import { isUnlimitedMileageService } from "@/lib/unlimitedMileage.ts";
-import { formatTime12h } from "@/lib/timeFormat.ts";
+import { formatAppDateTime, formatTime12h } from "@/lib/timeFormat.ts";
 import { BookingStatusStepper } from "@/components/booking-status-stepper.tsx";
 import { carPrimaryImage } from "@/lib/mediaUrl.ts";
 import { bookingVehicle } from "@/lib/displayName.ts";
@@ -188,7 +188,7 @@ function BookingDetailInner({ bookingId }: { bookingId: string }) {
               <InfoRow label="Booking ID" value={
                 <span className="font-mono text-xs text-muted-foreground">{booking._id.slice(-8).toUpperCase()}</span>
               } />
-              <InfoRow label="Created" value={format(new Date(booking._creationTime), "MMM d, yyyy 'at' h:mm a")} />
+              <InfoRow label="Created" value={formatAppDateTime(booking._creationTime)} />
               <InfoRow
                 label="Pickup Location"
                 value={
