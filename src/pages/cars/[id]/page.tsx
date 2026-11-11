@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { carsApi } from "@/api/cars.api.ts";
 import Navbar from "@/components/navbar.tsx";
@@ -26,6 +26,7 @@ const CAR_IMAGES: Record<string, string> = {
 export default function CarDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [activeImage, setActiveImage] = useState(0);
 
   useEffect(() => {
@@ -204,7 +205,10 @@ export default function CarDetailPage() {
                     className="w-full cursor-pointer"
                     size="lg"
                     disabled={!car.isAvailable}
-                    onClick={() => navigate("/contact")}
+                    onClick={() => {
+                      const qs = searchParams.toString();
+                      navigate(qs ? `/book/${car._id}?${qs}` : `/book/${car._id}`);
+                    }}
                   >
                     {car.isAvailable ? "Book This Car" : "Not Available"}
                   </Button>

@@ -124,7 +124,7 @@ const CarListingCard = memo(function CarListingCard({
 }: {
   car: FleetCar;
   onOpen: (carId: string) => void;
-  onBook: () => void;
+  onBook: (carId: string) => void;
 }) {
   const imgSrc = carPrimaryImage(car, CAR_IMAGES[car.category] ?? CAR_IMAGES.sedan);
 
@@ -179,7 +179,7 @@ const CarListingCard = memo(function CarListingCard({
             className="h-9 w-full cursor-pointer text-sm"
             onClick={(e) => {
               e.stopPropagation();
-              onBook();
+              onBook(car._id);
             }}
           >
             Book Now
@@ -287,9 +287,15 @@ export default function CarsPage() {
   const hasPanelFilters = transmission !== "all" || fuelType !== "all" || maxPrice[0] < 500;
   const hasFilters = hasPanelFilters || category !== "all" || sortBy !== "default";
 
-  const handleBookNow = useCallback(() => {
-    navigate("/contact");
-  }, [navigate]);
+  const handleBookNow = useCallback((carId: string) => {
+    const params = new URLSearchParams();
+    if (pickupDate) params.set("pickupDate", pickupDate);
+    if (pickupTime) params.set("pickupTime", pickupTime);
+    if (dropoffDate) params.set("dropoffDate", dropoffDate);
+    if (dropoffTime) params.set("dropoffTime", dropoffTime);
+    const qs = params.toString();
+    navigate(qs ? `/book/${carId}?${qs}` : `/book/${carId}`);
+  }, [dropoffDate, dropoffTime, navigate, pickupDate, pickupTime]);
 
   const handleOpenCar = useCallback((carId: string) => {
     navigate(`/cars/${carId}`);

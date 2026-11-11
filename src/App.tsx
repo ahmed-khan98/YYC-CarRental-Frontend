@@ -29,6 +29,7 @@ import AdminSettingsPage from "./pages/admin/settings/page.tsx";
 import AdminProfilePage from "./pages/admin/profile/page.tsx";
 import AdminBookingDetailPage from "./pages/admin/bookings/[id]/page.tsx";
 import BookingDetailPage from "./pages/bookings/[id]/page.tsx";
+import BookPage from "./pages/book/[id]/page.tsx";
 
 export default function App() {
   return (
@@ -39,7 +40,7 @@ export default function App() {
           <Route path="/" element={<Index />} />
           <Route path="/cars" element={<CarsPage />} />
           <Route path="/cars/:id" element={<CarDetailPage />} />
-          <Route path="/book/:id" element={<Navigate to="/contact" replace />} />
+          <Route path="/book/:id" element={<BookPage />} />
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/bookings/:id" element={<BookingDetailPage />} />
           <Route path="/profile" element={<ProfilePage />} />
