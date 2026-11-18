@@ -16,7 +16,7 @@ export default function ContactPage() {
   return (
     <div className="min-h-screen flex flex-col bg-background">
       <Navbar />
-      <div className="pt-16 flex-1">
+      <div className="pt-8 flex-1">
         <section className="relative py-16 sm:py-20 px-4 overflow-hidden">
           <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-transparent to-transparent" />
           <div className="mx-auto max-w-5xl text-center relative">

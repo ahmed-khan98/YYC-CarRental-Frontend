@@ -1,4 +1,4 @@
-import { useNavigate, useParams } from "react-router-dom";
+import { Navigate, useLocation, useNavigate, useParams } from "react-router-dom";
 import Navbar from "@/components/navbar.tsx";
 import Footer from "@/components/footer.tsx";
 import { Card, CardContent } from "@/components/ui/card.tsx";
@@ -6,10 +6,21 @@ import { Authenticated, Unauthenticated } from "@/components/auth-gate.tsx";
 import { SignInButton } from "@/components/ui/signin.tsx";
 import { BookingForm } from "@/components/booking-form/booking-form.tsx";
 import { ArrowLeft, Car } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton.tsx";
+import { useUserBookingEnabled } from "@/hooks/use-user-booking-enabled.ts";
 
 export default function BookPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
+  const { allowed: userBookingEnabled, isLoading: configLoading } = useUserBookingEnabled();
+
+  if (!configLoading && userBookingEnabled !== true) {
+    const params = new URLSearchParams(location.search);
+    if (id && !params.get("carId")) params.set("carId", id);
+    const search = params.toString();
+    return <Navigate to={{ pathname: "/contact", search: search ? `?${search}` : "" }} replace />;
+  }
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
@@ -30,21 +41,27 @@ export default function BookPage() {
             <p className="text-muted-foreground mt-1">Complete your reservation below</p>
           </div>
 
-          <Unauthenticated>
-            <Card className="border-border/50 text-center py-12">
-              <CardContent>
-                <h3 className="text-lg font-semibold mb-2">Sign in to book</h3>
-                <p className="text-muted-foreground text-sm mb-4">
-                  You need an account to make a reservation.
-                </p>
-                <SignInButton />
-              </CardContent>
-            </Card>
-          </Unauthenticated>
+          {configLoading ? (
+            <Skeleton className="h-64 w-full rounded-xl" />
+          ) : (
+            <>
+              <Unauthenticated>
+                <Card className="border-border/50 text-center py-12">
+                  <CardContent>
+                    <h3 className="text-lg font-semibold mb-2">Sign in to book</h3>
+                    <p className="text-muted-foreground text-sm mb-4">
+                      You need an account to make a reservation.
+                    </p>
+                    <SignInButton />
+                  </CardContent>
+                </Card>
+              </Unauthenticated>
 
-          <Authenticated>
-            {id && <BookingForm carId={id} />}
-          </Authenticated>
+              <Authenticated>
+                {id && <BookingForm carId={id} />}
+              </Authenticated>
+            </>
+          )}
         </div>
       </div>
       <Footer />

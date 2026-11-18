@@ -6,6 +6,7 @@ import {
   formatMoney,
   getBillEntryTotals,
   hasCheckOutPayment,
+  isDiscountEntry,
   resolveEntryPhase,
   BILL_ENTRY_STATUS_LABELS,
 } from "@/lib/billing.ts";
@@ -208,7 +209,9 @@ export function AdminManualChargesPanel({
 
   const extraMileageCharges = billEntries.filter(isExtraMileageCharge);
   const checkoutPaymentCollected = hasCheckOutPayment(billEntries);
-  const manualCharges = billEntries.filter((e) => e.entryType === "charge" && e.source === "manual");
+  const manualCharges = billEntries.filter(
+    (e) => e.entryType === "charge" && e.source === "manual" && !isDiscountEntry(e),
+  );
   const payments = billEntries.filter((e) => e.entryType === "payment");
 
   const invalidate = () => {

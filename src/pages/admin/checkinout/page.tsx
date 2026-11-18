@@ -149,7 +149,7 @@ function CheckInOutBookingTable({
                 <CarFront className="h-4 w-4 text-muted-foreground" />
               </div>
             )}
-            <span className="text-sm font-medium truncate">
+            <span className="text-xs font-medium truncate">
               {formatCarName(car)}
             </span>
           </div>
@@ -165,8 +165,8 @@ function CheckInOutBookingTable({
         const customer = booking.user;
         return (
           <div>
-            <p className="text-sm font-medium">{formatDisplayName(customer?.name)}</p>
-            <p className="text-xs text-muted-foreground truncate max-w-[140px]">{customer?.email ?? ""}</p>
+            <p className="text-xs font-medium truncate max-w-[140px]">{formatDisplayName(customer?.name)}</p>
+            <p className="text-[10px] text-muted-foreground truncate max-w-[140px]">{customer?.email ?? ""}</p>
           </div>
         );
       },
@@ -177,7 +177,7 @@ function CheckInOutBookingTable({
       className: "hidden md:table-cell",
       headClassName: "hidden md:table-cell",
       cell: (booking) => (
-        <span className="text-xs sm:text-sm">
+        <span className="text-[13px]">
           {formatDateWithTime(formatBookingDate(booking.pickupDate, "short"), booking.pickupTime)} —{" "}
           {formatDateWithTime(formatBookingDate(booking.returnDate), booking.returnTime)}
         </span>
@@ -197,7 +197,7 @@ function CheckInOutBookingTable({
       header: "Total",
       className: "hidden lg:table-cell",
       headClassName: "hidden lg:table-cell",
-      cell: (booking) => <span className="font-semibold text-primary text-sm">${booking.totalAmount}</span>,
+      cell: (booking) => <span className="font-semibold text-primary text-[13px]">${booking.totalAmount}</span>,
     },
     {
       id: "actions",
@@ -232,6 +232,7 @@ function CheckInOutBookingTable({
         getRowKey={(b) => b._id}
         isLoading={isLoading}
         emptyMessage={emptyMessage ?? "No bookings"}
+        tableClassName="text-[13px] [&_th]:h-8 [&_th]:px-1.5 [&_th]:text-[13px] [&_td]:px-1.5 [&_td]:py-1"
         expandedKey={expandedId}
         onRowClick={(b) => setExpandedId(expandedId === b._id ? null : b._id)}
         renderExpandedRow={(booking) => (
@@ -293,28 +294,33 @@ export default function AdminCheckInOutPage() {
   };
 
   return (
-    <div className="px-2.5 py-3 sm:p-6 space-y-4 sm:space-y-6">
-      <div>
-        <h2 className="text-2xl font-bold">Check In / Check Out</h2>
-        <p className="text-muted-foreground text-sm mt-0.5">
-          Perform check-in and check-out for bookings. Enable customer visibility per booking when ready.
-        </p>
-      </div>
-
+    <div className="p-3 sm:p-4 space-y-3">
       <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as BoardTab)}>
-        <TabsList className="h-auto w-fit">
-          <TabsTrigger value="awaiting" className="min-h-8 px-2.5 text-xs">
-            Awaiting Check-in
-          </TabsTrigger>
-          <TabsTrigger value="out" className="min-h-8 px-2.5 text-xs">
-            Currently Out
-          </TabsTrigger>
-          <TabsTrigger value="completed" className="min-h-8 px-2.5 text-xs">
-            Completed
-          </TabsTrigger>
-        </TabsList>
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-2xl font-bold truncate">Check In / Check Out</h2>
+          <TabsList className="h-8 shrink-0 rounded-lg border border-border/50 bg-transparent p-0.5">
+            <TabsTrigger
+              value="awaiting"
+              className="h-7 px-2.5 text-xs shadow-none data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-none"
+            >
+              Awaiting Check-in
+            </TabsTrigger>
+            <TabsTrigger
+              value="out"
+              className="h-7 px-2.5 text-xs shadow-none data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-none"
+            >
+              Currently Out
+            </TabsTrigger>
+            <TabsTrigger
+              value="completed"
+              className="h-7 px-2.5 text-xs shadow-none data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-none"
+            >
+              Completed
+            </TabsTrigger>
+          </TabsList>
+        </div>
 
-        <TabsContent value={activeTab} className="mt-2">
+        <TabsContent value={activeTab} className="mt-4">
           <CheckInOutBookingTable
             bookings={bookings}
             isLoading={activeQuery.isLoading}

@@ -1,9 +1,35 @@
 import Navbar from "@/components/navbar.tsx";
 import Footer from "@/components/footer.tsx";
 import { motion } from "motion/react";
-import { Shield, Star, MapPin, Users, Award, Clock } from "lucide-react";
+import { Shield, Star, MapPin, Users, Car, Clock } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { statsApi } from "@/api/stats.api.ts";
 
 export default function AboutPage() {
+  const { data: publicStats } = useQuery({
+    queryKey: ["stats", "public"],
+    queryFn: statsApi.getPublic,
+  });
+
+  const aboutStats = [
+    {
+      icon: Users,
+      value: publicStats ? `${publicStats.customers}+` : "—",
+      label: "Happy Customers",
+    },
+    {
+      icon: Car,
+      value: publicStats ? `${publicStats.cars}+` : "—",
+      label: "Vehicle Models",
+    },
+    {
+      icon: MapPin,
+      value: publicStats ? String(publicStats.locations) : "—",
+      label: "Locations",
+    },
+    { icon: Clock, value: "24/7", label: "Support Available" },
+  ];
+
   return (
     <div className="min-h-screen flex flex-col bg-background">
       <Navbar />
@@ -45,12 +71,7 @@ export default function AboutPage() {
               </motion.div>
               <motion.div initial={{ opacity: 0, x: 20 }} whileInView={{ opacity: 1, x: 0 }} transition={{ duration: 0.5 }} viewport={{ once: true }}>
                 <div className="grid grid-cols-2 gap-4">
-                  {[
-                    { icon: Users, value: "5,000+", label: "Happy Customers" },
-                    { icon: Award, value: "12+", label: "Vehicle Models" },
-                    { icon: MapPin, value: "4", label: "Locations" },
-                    { icon: Clock, value: "24/7", label: "Support Available" },
-                  ].map((stat) => (
+                  {aboutStats.map((stat) => (
                     <div key={stat.label} className="bg-card border border-border/50 rounded-xl p-5 text-center">
                       <stat.icon className="h-6 w-6 text-primary mx-auto mb-2" />
                       <div className="text-2xl font-bold">{stat.value}</div>

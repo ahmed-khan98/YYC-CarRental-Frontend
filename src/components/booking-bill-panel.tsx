@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 import type { BillEntry, BillSummary } from "@/types/index.ts";
-import { formatMoney } from "@/lib/billing.ts";
+import { DISCOUNT_SURFACE_CLASS, DISCOUNT_TEXT_CLASS, formatMoney, isDiscountEntry } from "@/lib/billing.ts";
 import { extraMileageLabel } from "@/lib/extraMileage.ts";
 import { BookingActorValue } from "@/components/booking-actor-value.tsx";
 import { actorFromBillEntry } from "@/lib/bookingActor.ts";
@@ -26,17 +26,26 @@ function ChargeRow({
   label,
   value,
   valueClassName,
+  labelClassName,
+  className,
   sublabel,
 }: {
   label: ReactNode;
   value: ReactNode;
   valueClassName?: string;
+  labelClassName?: string;
+  className?: string;
   sublabel?: ReactNode;
 }) {
   return (
-    <div className="flex items-start justify-between gap-3 border-b border-border/20 px-3 py-2.5 text-sm last:border-0">
+    <div
+      className={cn(
+        "flex items-start justify-between gap-3 border-b border-border/20 px-3 py-2.5 text-sm last:border-0",
+        className,
+      )}
+    >
       <div className="min-w-0">
-        <span className="text-muted-foreground leading-snug">{label}</span>
+        <span className={cn("text-muted-foreground leading-snug", labelClassName)}>{label}</span>
         {sublabel && <div className="mt-0.5 text-[11px] text-muted-foreground/80">{sublabel}</div>}
       </div>
       <span className={cn("shrink-0 font-medium tabular-nums text-foreground text-right", valueClassName)}>
@@ -60,20 +69,31 @@ function SummaryRow({
   value,
   emphasized,
   valueClassName,
+  labelClassName,
+  className,
 }: {
   label: string;
   value: ReactNode;
   emphasized?: boolean;
   valueClassName?: string;
+  labelClassName?: string;
+  className?: string;
 }) {
   return (
     <div
       className={cn(
         "flex items-center justify-between gap-3 border-b border-border/20 px-4 py-3 last:border-0",
         emphasized && "bg-muted/30",
+        className,
       )}
     >
-      <span className={cn("text-sm", emphasized ? "font-semibold" : "font-medium text-muted-foreground")}>
+      <span
+        className={cn(
+          "text-sm",
+          emphasized ? "font-semibold" : "font-medium text-muted-foreground",
+          labelClassName,
+        )}
+      >
         {label}
       </span>
       <span
@@ -147,6 +167,7 @@ type BookingBillPanelProps = {
   chargePerExtraKm?: number | null;
   dailyRate?: number;
   isCancelled?: boolean;
+  showChargeActors?: boolean;
 };
 
 export function BookingBillPanel({
@@ -161,6 +182,7 @@ export function BookingBillPanel({
   chargePerExtraKm,
   dailyRate = 0,
   isCancelled = false,
+  showChargeActors = false,
 }: BookingBillPanelProps) {
   const [rentalOpen, setRentalOpen] = useState(false);
   const [servicesOpen, setServicesOpen] = useState(false);
@@ -171,7 +193,13 @@ export function BookingBillPanel({
   const systemCharges = billEntries.filter(
     (entry) => entry.entryType === "charge" && entry.source === "system",
   );
-  const manualCharges = billEntries.filter((e) => e.entryType === "charge" && e.source === "manual");
+  const discountEntries = billEntries.filter(isDiscountEntry);
+  const manualCharges = billEntries.filter(
+    (e) => e.entryType === "charge" && e.source === "manual" && !isDiscountEntry(e),
+  );
+  const discountAmount =
+    billSummary.discountAmount ??
+    discountEntries.reduce((sum, entry) => sum + Number(entry.amount || 0), 0);
   const payments = billEntries.filter((e) => e.entryType === "payment");
   const paidPayments = payments.filter((e) => e.status === "paid");
   const refundPayments = payments.filter((e) => e.status === "refund");
@@ -198,8 +226,10 @@ export function BookingBillPanel({
         : [];
 
   const additionalSubtotal =
-    extraMileageCharge + manualCharges.reduce((sum, entry) => sum + entry.amount, 0);
-  const additionalLineCount = (hasExtraMileage ? 1 : 0) + manualCharges.length;
+    extraMileageCharge +
+    manualCharges.reduce((sum, entry) => sum + entry.amount, 0);
+  const additionalLineCount =
+    (hasExtraMileage ? 1 : 0) + manualCharges.length;
   const hasAdditionalCharges = additionalLineCount > 0;
 
   const rentalLineCount = 1;
@@ -299,7 +329,7 @@ export function BookingBillPanel({
               />
             )}
             {manualCharges.map((entry) => {
-              const actor = actorFromBillEntry(entry);
+              const actor = showChargeActors ? actorFromBillEntry(entry) : null;
               return (
                 <ChargeRow
                   key={entry._id}
@@ -373,6 +403,15 @@ export function BookingBillPanel({
 
         <div className="overflow-hidden rounded-lg border border-border/40 bg-muted/10">
           <SummaryRow label="Subtotal" value={formatMoney(billSummary.chargeSubtotal)} />
+          {discountAmount > 0 && (
+            <SummaryRow
+              label="Discount"
+              value={`−${formatMoney(discountAmount)}`}
+              className={DISCOUNT_SURFACE_CLASS}
+              labelClassName={DISCOUNT_TEXT_CLASS}
+              valueClassName={DISCOUNT_TEXT_CLASS}
+            />
+          )}
           <SummaryRow label="Tax (5%)" value={formatMoney(billSummary.taxAmount)} />
           <SummaryRow label="Total Bill" value={formatMoney(billSummary.totalBill)} emphasized />
           {billSummary.totalPaid > 0 && (

@@ -30,6 +30,7 @@ export const inspectionsApi = {
       description?: string;
       amount: number;
     }[];
+    discountAmount?: number;
     extraDrivers?: ExtraDriverCheckInDetail[];
     mainDriver?: MainDriverCheckInDetail;
   }) => {

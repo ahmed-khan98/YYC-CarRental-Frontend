@@ -5,6 +5,8 @@ import type { Location } from "@/types/index.ts";
 import { Button } from "@/components/ui/button.tsx";
 import { Input } from "@/components/ui/input.tsx";
 import { Label } from "@/components/ui/label.tsx";
+import { Badge } from "@/components/ui/badge.tsx";
+import { Switch } from "@/components/ui/switch.tsx";
 import { AdminDataTable, type AdminTableColumn } from "@/components/admin-data-table.tsx";
 import { AdminListPagination } from "@/components/admin-list-pagination.tsx";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog.tsx";
@@ -12,6 +14,7 @@ import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog.tsx";
 import { toast } from "sonner";
 import { Plus, Pencil, Trash2, MapPin } from "lucide-react";
 import { Hint } from "@/components/ui/tooltip.tsx";
+import { cn } from "@/lib/utils.ts";
 import { patchText } from "@/lib/patchPayload.ts";
 import { useAuth } from "@/hooks/use-auth.ts";
 import { canDeleteRecords } from "@/lib/roles.ts";
@@ -40,11 +43,6 @@ export default function AdminLocationsPage() {
       locationsApi.update(locationId, data),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["locations"] }),
   });
-  // Temporary: hard delete commented out — delete button calls deactivate
-  // const remove = useMutation({
-  //   mutationFn: locationsApi.remove,
-  //   onSuccess: () => queryClient.invalidateQueries({ queryKey: ["locations"] }),
-  // });
   const deactivate = useMutation({
     mutationFn: locationsApi.deactivate,
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["locations"] }),
@@ -97,11 +95,14 @@ export default function AdminLocationsPage() {
     }
   };
 
-  // Temporary: Active toggle handler hidden — will return later
-  // const handleToggle = async (id: string, current: boolean) => {
-  //   await update.mutateAsync({ locationId: id, data: { isActive: !current } });
-  //   toast.success(`Location ${!current ? "activated" : "deactivated"}`);
-  // };
+  const handleToggle = async (id: string, current: boolean) => {
+    try {
+      await update.mutateAsync({ locationId: id, data: { isActive: !current } });
+      toast.success(`Location ${!current ? "activated" : "deactivated"}`);
+    } catch {
+      toast.error("Failed to update location");
+    }
+  };
 
   const locationColumns: AdminTableColumn<Location>[] = [
     {
@@ -133,34 +134,42 @@ export default function AdminLocationsPage() {
       headClassName: "hidden md:table-cell",
       cell: (loc) => loc.phone ?? "—",
     },
-    // Temporary: Status badge column hidden — do not delete
-    // {
-    //   id: "status",
-    //   header: "Status",
-    //   cell: (loc) => (
-    //     <Badge
-    //       variant="outline"
-    //       className={cn(
-    //         "text-[11px] font-medium border",
-    //         loc.isActive
-    //           ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-    //           : "bg-red-50 text-red-700 border-red-200",
-    //       )}
-    //     >
-    //       {loc.isActive ? "Active" : "Inactive"}
-    //     </Badge>
-    //   ),
-    // },
-    // Temporary: Active toggle column hidden — do not delete
-    // {
-    //   id: "active",
-    //   header: "Active",
-    //   className: "hidden lg:table-cell",
-    //   headClassName: "hidden lg:table-cell",
-    //   cell: (loc) => (
-    //     <Switch checked={loc.isActive} onCheckedChange={() => handleToggle(loc._id, loc.isActive)} className="cursor-pointer" />
-    //   ),
-    // },
+    {
+      id: "status",
+      header: "Status",
+      cell: (loc) => {
+        const active = loc.isActive !== false;
+        return (
+          <Badge
+            variant="outline"
+            className={cn(
+              "text-[11px] font-medium border",
+              active
+                ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                : "bg-red-50 text-red-700 border-red-200",
+            )}
+          >
+            {active ? "Active" : "Deactive"}
+          </Badge>
+        );
+      },
+    },
+    {
+      id: "active",
+      header: "Active",
+      cell: (loc) => {
+        const active = loc.isActive !== false;
+        return (
+          <Switch
+            checked={active}
+            onCheckedChange={() => handleToggle(loc._id, active)}
+            disabled={update.isPending}
+            className="h-6 w-11 cursor-pointer data-[state=checked]:bg-emerald-600 data-[state=checked]:border-emerald-600 data-[state=unchecked]:bg-red-500 data-[state=unchecked]:border-red-500"
+            aria-label={active ? "Deactivate location" : "Activate location"}
+          />
+        );
+      },
+    },
     {
       id: "actions",
       header: "Actions",
@@ -186,7 +195,7 @@ export default function AdminLocationsPage() {
   ];
 
   return (
-    <div className="p-6 space-y-5">
+    <div className="p-3 sm:p-4 space-y-3">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h2 className="text-2xl font-bold">Locations</h2>

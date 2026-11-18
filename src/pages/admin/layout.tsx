@@ -12,7 +12,7 @@ import { useAuth } from "@/hooks/use-auth.ts";
 import { cn } from "@/lib/utils.ts";
 import {
   LayoutDashboard, Car, CalendarCheck, Users, MapPin, Shield, Wrench,
-  ChevronRight, CarFront, UserCog, LogOut, Settings, User,
+  ChevronRight, CarFront, UserCog, LogOut, Settings, User, Sparkles,
 } from "lucide-react";
 
 const NAV_ITEMS = [
@@ -20,11 +20,12 @@ const NAV_ITEMS = [
   { href: "/admin/cars", label: "Cars", icon: Car },
   { href: "/admin/bookings", label: "Bookings", icon: CalendarCheck },
   { href: "/admin/checkinout", label: "Check In/Out", icon: CarFront },
-  { href: "/admin/customers", label: "Customers", icon: Users },
   { href: "/admin/locations", label: "Locations", icon: MapPin },
   { href: "/admin/services", label: "Services", icon: Shield },
-  { href: "/admin/maintenance", label: "Maintenance", icon: Wrench },
+  { href: "/admin/features", label: "Features", icon: Sparkles },
+  { href: "/admin/customers", label: "Customers", icon: Users },
   { href: "/admin/team", label: "Sub-Admins", icon: UserCog, fullAdminOnly: true },
+  { href: "/admin/maintenance", label: "Maintenance", icon: Wrench },
   { href: "/admin/config", label: "Config", icon: Settings, fullAdminOnly: true },
   { href: "/admin/profile", label: "Profile", icon: User },
 ];

@@ -2,6 +2,7 @@ import { useState, useRef, useCallback, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { carsApi } from "@/api/cars.api.ts";
+import { featuresApi } from "@/api/features.api.ts";
 import { uploadFile } from "@/api/upload.api.ts";
 import type { Car, CarCategory } from "@/types/index.ts";
 import {
@@ -21,7 +22,8 @@ import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog.tsx";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select.tsx";
 import { Switch } from "@/components/ui/switch.tsx";
 import { getApiErrorMessage } from "@/api/client.ts";
-import { patchStringList, patchText } from "@/lib/patchPayload.ts";
+import { patchText } from "@/lib/patchPayload.ts";
+import { FeatureMultiSelect } from "@/components/feature-multi-select.tsx";
 import { toast } from "sonner";
 import { Plus, Pencil, Trash2, Car as CarIcon, Upload, X, ImageIcon, CalendarDays, Loader2 } from "lucide-react";
 import { UploadProgressStatus, overallUploadPercent, uploadProgressLabel } from "@/components/upload-progress.tsx";
@@ -40,6 +42,14 @@ import { listItems } from "@/lib/pagination.ts";
 
 type Transmission = Car["transmission"];
 type FuelType = Car["fuelType"];
+
+const MAX_ADDITIONAL_IMAGES = 5;
+
+type AdditionalImageItem = {
+  preview: string;
+  file?: File;
+  existingUrl?: string;
+};
 
 function FieldError({ message }: { message?: string }) {
   if (!message) return null;
@@ -78,6 +88,11 @@ export default function AdminCarsPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["cars"] }),
   });
 
+  const { data: featuresResult } = useQuery({
+    queryKey: ["features", { activeOnly: true }],
+    queryFn: () => featuresApi.list(true),
+  });
+  const catalogFeatures = listItems(featuresResult);
   const [open, setOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Car | null>(null);
   const [editId, setEditId] = useState<string | null>(null);
@@ -92,8 +107,7 @@ export default function AdminCarsPage() {
   // Image upload state
   const [mainImage, setMainImage] = useState<File | null>(null);
   const [mainImagePreview, setMainImagePreview] = useState<string>("");
-  const [additionalImages, setAdditionalImages] = useState<File[]>([]);
-  const [additionalPreviews, setAdditionalPreviews] = useState<string[]>([]);
+  const [additionalItems, setAdditionalItems] = useState<AdditionalImageItem[]>([]);
   // Existing storage IDs when editing
   const [existingImageUrls, setExistingImageUrls] = useState<string[]>([]);
 
@@ -112,8 +126,7 @@ export default function AdminCarsPage() {
   const resetImageState = () => {
     setMainImage(null);
     setMainImagePreview("");
-    setAdditionalImages([]);
-    setAdditionalPreviews([]);
+    setAdditionalItems([]);
     setExistingImageUrls([]);
     if (mainImageRef.current) mainImageRef.current.value = "";
     if (additionalImagesRef.current) additionalImagesRef.current.value = "";
@@ -137,7 +150,7 @@ export default function AdminCarsPage() {
       seats: String(car.seats), transmission: car.transmission, fuelType: car.fuelType,
       mileage: car.mileage != null ? String(car.mileage) : "",
       description: car.description ?? "",
-      features: car.features?.join(", ") ?? "",
+      features: car.features ?? [],
     });
     setFieldErrors({});
     resetImageState();
@@ -145,7 +158,12 @@ export default function AdminCarsPage() {
     const previews = carImageUrls(car);
     setExistingImageUrls(stored);
     setMainImagePreview(previews[0] ?? "");
-    setAdditionalPreviews(previews.slice(1));
+    setAdditionalItems(
+      previews.slice(1).map((preview, index) => ({
+        preview,
+        existingUrl: stored[index + 1],
+      })),
+    );
     setEditId(car._id);
     setOpen(true);
   }, []);
@@ -159,9 +177,18 @@ export default function AdminCarsPage() {
   };
 
   const handleAdditionalImagesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files ?? []).slice(0, 3).map((file) => persistBrowserFile(file, "car"));
-    setAdditionalImages(files);
-    setAdditionalPreviews(files.map((f) => URL.createObjectURL(f)));
+    const remaining = MAX_ADDITIONAL_IMAGES - additionalItems.length;
+    const files = Array.from(e.target.files ?? []).slice(0, Math.max(0, remaining)).map((file) => persistBrowserFile(file, "car"));
+    if (files.length === 0) return;
+    setAdditionalItems((prev) => [
+      ...prev,
+      ...files.map((file) => ({ preview: URL.createObjectURL(file), file })),
+    ]);
+    e.target.value = "";
+  };
+
+  const removeAdditionalImage = (index: number) => {
+    setAdditionalItems((prev) => prev.filter((_, itemIndex) => itemIndex !== index));
   };
 
   const handleSave = async () => {
@@ -175,11 +202,15 @@ export default function AdminCarsPage() {
     setSavingLabel("Saving...");
     try {
       let imageUrls: string[] = [...existingImageUrls];
+      const extraFiles = additionalItems.filter((item) => item.file).map((item) => item.file!);
+      const keptExtraUrls = additionalItems
+        .map((item) => item.existingUrl)
+        .filter((url): url is string => Boolean(url));
 
-      if (mainImage || additionalImages.length > 0) {
+      if (mainImage || extraFiles.length > 0) {
         const queued = [
           ...(mainImage ? [{ file: mainImage, kind: "main" as const }] : []),
-          ...additionalImages.map((file) => ({ file, kind: "extra" as const })),
+          ...extraFiles.map((file) => ({ file, kind: "extra" as const })),
         ];
         const uploaded: { kind: "main" | "extra"; url: string }[] = [];
         for (let i = 0; i < queued.length; i += 1) {
@@ -199,9 +230,9 @@ export default function AdminCarsPage() {
         if (mainUrl) {
           imageUrls = [mainUrl, ...imageUrls.slice(1)];
         }
-        if (additionalUrls.length > 0) {
-          imageUrls = [imageUrls[0], ...additionalUrls].filter(Boolean);
-        }
+        imageUrls = [imageUrls[0], ...keptExtraUrls, ...additionalUrls].filter(Boolean);
+      } else {
+        imageUrls = [imageUrls[0], ...keptExtraUrls].filter(Boolean);
       }
       setSavingLabel("Saving car...");
       setUploadPercent(null);
@@ -216,7 +247,7 @@ export default function AdminCarsPage() {
         transmission: form.transmission, fuelType: form.fuelType,
         mileage: Number(form.mileage),
         description: patchText(form.description),
-        features: patchStringList(form.features),
+        features: form.features,
         imageUrls: imageUrls.map((url) => resolveMediaUrl(url)).filter(Boolean),
       };
 
@@ -359,7 +390,7 @@ export default function AdminCarsPage() {
   ], [canDelete, handleToggleAvailable, navigate, openEdit]);
 
   return (
-    <div className="p-6 space-y-5">
+    <div className="p-3 sm:p-4 space-y-3">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h2 className="text-2xl font-bold">Cars</h2>
@@ -540,72 +571,91 @@ export default function AdminCarsPage() {
               </div>
             ))}
 
-            {/* Main Image Upload */}
-            <div className="sm:col-span-2 space-y-2">
-              <Label className="text-xs flex items-center gap-1">
-                <ImageIcon className="h-3 w-3" /> Main Image
-              </Label>
-              <div
-                className="border-2 border-dashed border-border/50 rounded-xl p-4 text-center cursor-pointer hover:border-primary/50 transition-colors"
-                onClick={() => mainImageRef.current?.click()}
-              >
-                {mainImagePreview ? (
-                  <div className="relative">
-                    <img src={mainImagePreview} alt="Main" className="w-full h-36 object-cover rounded-lg" />
-                    <button
-                      onClick={(e) => { e.stopPropagation(); setMainImage(null); setMainImagePreview(""); if (mainImageRef.current) mainImageRef.current.value = ""; }}
-                      className="absolute top-2 right-2 bg-destructive text-destructive-foreground rounded-full p-0.5 cursor-pointer"
-                    >
-                      <X className="h-3 w-3" />
-                    </button>
-                  </div>
-                ) : (
-                  <div className="py-4 text-muted-foreground">
-                    <Upload className="h-6 w-6 mx-auto mb-2" />
-                    <p className="text-sm">Click to upload main image</p>
-                    <p className="text-xs mt-0.5">JPG, PNG, WebP</p>
-                  </div>
-                )}
-              </div>
-              <input ref={mainImageRef} type="file" accept="image/*" className="hidden" onChange={handleMainImageChange} />
-            </div>
-
-            {/* Additional Images Upload */}
-            <div className="sm:col-span-2 space-y-2">
-              <Label className="text-xs flex items-center gap-1">
-                <ImageIcon className="h-3 w-3" /> Additional Images (up to 3)
-              </Label>
-              <div
-                className="border-2 border-dashed border-border/50 rounded-xl p-4 cursor-pointer hover:border-primary/50 transition-colors"
-                onClick={() => additionalImagesRef.current?.click()}
-              >
-                {additionalPreviews.length > 0 ? (
-                  <div className="grid grid-cols-3 gap-2">
-                    {additionalPreviews.map((src, i) => (
-                      <img key={i} src={src} alt={`Additional ${i + 1}`} className="w-full h-20 object-cover rounded-lg" />
-                    ))}
-                  </div>
-                ) : (
-                  <div className="py-3 text-center text-muted-foreground">
-                    <Upload className="h-5 w-5 mx-auto mb-1" />
-                    <p className="text-xs">Click to upload additional images (up to 3)</p>
-                  </div>
-                )}
-              </div>
-              <input ref={additionalImagesRef} type="file" accept="image/*" multiple className="hidden" onChange={handleAdditionalImagesChange} />
-              {additionalPreviews.length > 0 && (
-                <button
-                  onClick={() => { setAdditionalImages([]); setAdditionalPreviews([]); if (additionalImagesRef.current) additionalImagesRef.current.value = ""; }}
-                  className="text-xs text-muted-foreground hover:text-destructive cursor-pointer"
+            <div className="sm:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="flex flex-col gap-2">
+                <Label className="text-xs flex items-center gap-1">
+                  <ImageIcon className="h-3 w-3" /> Main Image
+                </Label>
+                <div
+                  className="h-32 border-2 border-dashed border-border/50 rounded-xl p-2.5 text-center cursor-pointer hover:border-primary/50 transition-colors"
+                  onClick={() => mainImageRef.current?.click()}
                 >
-                  Clear additional images
-                </button>
-              )}
+                  {mainImagePreview ? (
+                    <div className="relative h-full">
+                      <img src={mainImagePreview} alt="Main" className="h-full w-full object-contain rounded-lg" />
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); setMainImage(null); setMainImagePreview(""); if (mainImageRef.current) mainImageRef.current.value = ""; }}
+                        className="absolute top-1.5 right-1.5 bg-destructive text-destructive-foreground rounded-full p-0.5 cursor-pointer"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex h-full flex-col items-center justify-center text-muted-foreground">
+                      <Upload className="h-5 w-5 mb-1" />
+                      <p className="text-sm">Click to upload main image</p>
+                      <p className="text-xs mt-0.5">JPG, PNG, WebP</p>
+                    </div>
+                  )}
+                </div>
+                <input ref={mainImageRef} type="file" accept="image/*" className="hidden" onChange={handleMainImageChange} />
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <Label className="text-xs flex items-center gap-1">
+                  <ImageIcon className="h-3 w-3" /> Additional Images (up to {MAX_ADDITIONAL_IMAGES})
+                </Label>
+                <div
+                  className="h-32 border-2 border-dashed border-border/50 rounded-xl p-2.5 cursor-pointer hover:border-primary/50 transition-colors"
+                  onClick={() => {
+                    if (additionalItems.length >= MAX_ADDITIONAL_IMAGES) {
+                      toast.error(`You can add up to ${MAX_ADDITIONAL_IMAGES} additional images`);
+                      return;
+                    }
+                    additionalImagesRef.current?.click();
+                  }}
+                >
+                  {additionalItems.length > 0 ? (
+                    <div className="grid h-full grid-cols-3 grid-rows-2 gap-1.5">
+                      {additionalItems.map((item, i) => (
+                        <div key={`${item.existingUrl ?? item.preview}-${i}`} className="relative min-h-0">
+                          <img src={item.preview} alt={`Additional ${i + 1}`} className="h-full w-full object-cover rounded-md" />
+                          <button
+                            type="button"
+                            aria-label={`Remove additional image ${i + 1}`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              removeAdditionalImage(i);
+                            }}
+                            className="absolute top-0.5 right-0.5 bg-destructive text-destructive-foreground rounded-full p-0.5 cursor-pointer"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="flex h-full flex-col items-center justify-center text-center text-muted-foreground">
+                      <Upload className="h-5 w-5 mb-1" />
+                      <p className="text-xs">Click to upload additional images (up to {MAX_ADDITIONAL_IMAGES})</p>
+                    </div>
+                  )}
+                </div>
+                <input ref={additionalImagesRef} type="file" accept="image/*" multiple className="hidden" onChange={handleAdditionalImagesChange} />
+              </div>
             </div>
 
             <div className="sm:col-span-2 space-y-1">
-              <Label className="text-xs">Features (comma-separated)</Label>
-              <Input value={form.features} onChange={f("features")} placeholder="AC, Bluetooth, GPS..." />
+              <Label className="text-xs">Features</Label>
+              <FeatureMultiSelect
+                options={[...new Set([
+                  ...catalogFeatures.filter((feature) => feature.isActive !== false).map((feature) => feature.name),
+                  ...form.features,
+                ])]}
+                value={form.features}
+                onChange={(features) => setForm((prev) => ({ ...prev, features }))}
+              />
             </div>
             <div className="sm:col-span-2 space-y-1">
               <Label className="text-xs">Description</Label>

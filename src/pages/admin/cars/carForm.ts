@@ -19,7 +19,7 @@ export interface CarForm {
   fuelType: FuelType;
   mileage: string;
   description: string;
-  features: string;
+  features: string[];
 }
 
 export const EMPTY_FORM: CarForm = {
@@ -38,7 +38,7 @@ export const EMPTY_FORM: CarForm = {
   fuelType: "gasoline",
   mileage: "",
   description: "",
-  features: "",
+  features: [],
 };
 
 export type CarFormErrors = Partial<Record<keyof CarForm, string>>;

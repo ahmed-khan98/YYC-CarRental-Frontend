@@ -325,6 +325,7 @@ export default function AdminBookingDetailPage() {
               chargePerExtraKm={car?.chargePerExtraKm ?? booking.bookedChargePerExtraKm}
               dailyRate={car?.dailyRate ?? booking.bookedDailyRate ?? 0}
               isCancelled={booking.status === "cancelled"}
+              showChargeActors
             />
           </div>
         </div>

@@ -77,6 +77,7 @@ export interface SecurityDepositSummary {
 export interface BillSummary {
   chargeSubtotal: number;
   taxAmount: number;
+  discountAmount?: number;
   totalBill: number;
   totalPaid: number;
   totalUnpaid: number;
@@ -175,6 +176,13 @@ export interface Location {
   address: string;
   city: string;
   phone?: string;
+  isActive: boolean;
+  _creationTime: number;
+}
+
+export interface CarFeature {
+  _id: string;
+  name: string;
   isActive: boolean;
   _creationTime: number;
 }

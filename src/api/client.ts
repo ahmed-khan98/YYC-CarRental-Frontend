@@ -12,12 +12,7 @@ function configuredApiBase() {
 }
 
 function resolveApiBase() {
-  const configured = configuredApiBase();
-  // Dev: hit the Vite proxy so phones on 192.168.x.x:5173 don't call localhost on the phone.
-  if (import.meta.env.DEV) {
-    return "/api/v1";
-  }
-  return configured || "http://localhost:5000/api/v1";
+  return configuredApiBase() || "http://localhost:5000/api/v1";
 }
 
 export const API_BASE = resolveApiBase();

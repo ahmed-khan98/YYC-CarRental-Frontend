@@ -125,7 +125,7 @@ export default function AdminBookingsPage() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [paymentFilter, setPaymentFilter] = useState("all");
   const [sortField, setSortField] = useState<AdminBookingSortField>("pickupDate");
-  const [sortDir, setSortDir] = useState<AdminBookingSortDir>("desc");
+  const [sortDir, setSortDir] = useState<AdminBookingSortDir>("asc");
 
   const [editBooking, setEditBooking] = useState<Booking | null>(null);
   const [cancelOpen, setCancelOpen] = useState(false);
@@ -175,7 +175,7 @@ export default function AdminBookingsPage() {
       setSortDir((d) => (d === "asc" ? "desc" : "asc"));
     } else {
       setSortField(field);
-      setSortDir(field === "status" ? "asc" : "desc");
+      setSortDir("asc");
     }
   };
 

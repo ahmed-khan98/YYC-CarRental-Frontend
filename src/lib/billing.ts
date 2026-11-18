@@ -1,13 +1,15 @@
 import { calculateTaxAmount, calculateGrandTotal, formatMoney } from "@/lib/rentalPricing.ts";
-import type { BillEntry, BillEntryPhase, BillEntryStatus } from "@/types/index.ts";
+import type { BillEntry, BillEntryPhase, BillEntryStatus, BillSummary } from "@/types/index.ts";
 
-export interface BillSummary {
-  chargeSubtotal: number;
-  taxAmount: number;
-  totalBill: number;
-  totalPaid: number;
-  totalUnpaid: number;
+export function isDiscountEntry(entry: Pick<BillEntry, "entryType" | "systemKey" | "title">) {
+  if (entry.systemKey === "discount") return true;
+  return entry.entryType === "charge" && /^discount$/i.test(String(entry.title ?? "").trim());
 }
+
+/** Discount color — amber, so it stays distinct from paid green. */
+export const DISCOUNT_TEXT_CLASS = "text-amber-700";
+export const DISCOUNT_SURFACE_CLASS = "bg-amber-50";
+export const DISCOUNT_BORDER_CLASS = "border-amber-200";
 
 function resolveEntryStatus(entry: BillEntry): BillEntryStatus {
   return entry.status ?? "unpaid";
@@ -30,16 +32,26 @@ export function resolveBillEntryTotalAmount(entry: BillEntry): number {
 /** Paid deposit/e-transfer charges settle the bill without a payment line. */
 export function isStandalonePaidCharge(entry: BillEntry) {
   if (entry.entryType !== "charge" || entry.source !== "manual") return false;
+  if (isDiscountEntry(entry)) return false;
   if (resolveEntryStatus(entry) !== "paid") return false;
   return entry.paidVia === "deposit" || entry.paidVia === "e_transfer";
 }
 export function computeBillSummary(entries: BillEntry[] = []): BillSummary {
-  const charges = entries.filter((e) => e.entryType === "charge");
+  const charges = entries.filter((e) => e.entryType === "charge" && !isDiscountEntry(e));
   const payments = entries.filter((e) => e.entryType === "payment");
+  const discountAmount =
+    Math.round(
+      entries
+        .filter((e) => isDiscountEntry(e) && resolveEntryStatus(e) !== "refund")
+        .reduce((sum, e) => sum + e.amount, 0) * 100,
+    ) / 100;
 
-  const chargeSubtotal = charges.reduce((sum, e) => sum + e.amount, 0);
-  const taxAmount = calculateTaxAmount(chargeSubtotal);
-  const totalBill = calculateGrandTotal(chargeSubtotal);
+  const chargeSubtotal =
+    Math.round(charges.reduce((sum, e) => sum + e.amount, 0) * 100) / 100;
+  const appliedDiscount = Math.min(discountAmount, Math.max(0, chargeSubtotal));
+  const taxable = Math.round((chargeSubtotal - appliedDiscount) * 100) / 100;
+  const taxAmount = calculateTaxAmount(taxable);
+  const totalBill = calculateGrandTotal(taxable);
 
   const paymentTotal = payments
     .filter((e) => resolveEntryStatus(e) === "paid")
@@ -56,7 +68,7 @@ export function computeBillSummary(entries: BillEntry[] = []): BillSummary {
   const totalPaid = Math.round((netPayments + chargeCredit) * 100) / 100;
   const totalUnpaid = Math.max(0, Math.round((totalBill - totalPaid) * 100) / 100);
 
-  return { chargeSubtotal, taxAmount, totalBill, totalPaid, totalUnpaid };
+  return { chargeSubtotal, taxAmount, discountAmount: appliedDiscount, totalBill, totalPaid, totalUnpaid };
 }
 
 export type CheckoutBalancePreview = {
@@ -69,6 +81,8 @@ export type CheckoutBalancePreview = {
   pendingChargeTax: number;
   pendingChargeTotal: number;
   addedTax: number;
+  discountAmount: number;
+  totalUnpaidBeforeDiscount: number;
   totalUnpaid: number;
 };
 
@@ -96,21 +110,9 @@ export function projectCheckoutBalance(
   entries: BillEntry[] = [],
   extraMileageCharge = 0,
   pendingManualCharges: { title?: string; amount: number }[] = [],
+  discountAmount = 0,
 ): CheckoutBalancePreview {
   const current = computeBillSummary(entries);
-  const emptyPreview: CheckoutBalancePreview = {
-    totalPaid: current.totalPaid,
-    balanceBeforeExtra: current.totalUnpaid,
-    extraMileageCharge: 0,
-    extraMileageTax: 0,
-    extraMileageTotal: 0,
-    pendingChargeSubtotal: 0,
-    pendingChargeTax: 0,
-    pendingChargeTotal: 0,
-    addedTax: 0,
-    totalUnpaid: current.totalUnpaid,
-  };
-
   const mileageEntries =
     extraMileageCharge > 0
       ? [projectedChargeEntry("projected-extra-mileage", "Extra Mileage", extraMileageCharge, "system", "extra_mileage")]
@@ -125,13 +127,30 @@ export function projectCheckoutBalance(
         "manual",
       ),
     );
-
-  if (mileageEntries.length === 0 && pendingEntries.length === 0) {
-    return emptyPreview;
-  }
+  const requestedDiscount = Math.max(0, Math.round(Number(discountAmount || 0) * 100) / 100);
+  const discountEntries =
+    requestedDiscount > 0
+      ? [projectedChargeEntry("projected-discount", "Discount", requestedDiscount, "manual", "discount")]
+      : [];
 
   const withMileage = computeBillSummary([...entries, ...mileageEntries]);
-  const projected = computeBillSummary([...entries, ...mileageEntries, ...pendingEntries]);
+  const projectedNoDiscount = computeBillSummary([...entries, ...mileageEntries, ...pendingEntries]);
+  const projected = computeBillSummary([
+    ...entries,
+    ...mileageEntries,
+    ...pendingEntries,
+    ...discountEntries,
+  ]);
+  const checkoutChargeSubtotal =
+    Math.round(
+      ((extraMileageCharge > 0 ? extraMileageCharge : 0) +
+        pendingEntries.reduce((sum, entry) => sum + entry.amount, 0)) *
+        100,
+    ) / 100;
+  const maxDiscount = Math.max(
+    0,
+    Math.round((checkoutChargeSubtotal + current.totalUnpaid) * 100) / 100,
+  );
 
   return {
     totalPaid: current.totalPaid,
@@ -140,9 +159,11 @@ export function projectCheckoutBalance(
     extraMileageTax: Math.round((withMileage.taxAmount - current.taxAmount) * 100) / 100,
     extraMileageTotal: Math.round((withMileage.totalBill - current.totalBill) * 100) / 100,
     pendingChargeSubtotal: pendingEntries.reduce((sum, entry) => sum + entry.amount, 0),
-    pendingChargeTax: Math.round((projected.taxAmount - withMileage.taxAmount) * 100) / 100,
-    pendingChargeTotal: Math.round((projected.totalBill - withMileage.totalBill) * 100) / 100,
+    pendingChargeTax: Math.round((projectedNoDiscount.taxAmount - withMileage.taxAmount) * 100) / 100,
+    pendingChargeTotal: Math.round((projectedNoDiscount.totalBill - withMileage.totalBill) * 100) / 100,
     addedTax: Math.round((projected.taxAmount - current.taxAmount) * 100) / 100,
+    discountAmount: projected.discountAmount,
+    totalUnpaidBeforeDiscount: maxDiscount,
     totalUnpaid: projected.totalUnpaid,
   };
 }
@@ -160,7 +181,8 @@ export function resolveEntryPhase(entry: BillEntry): BillEntryPhase {
     entry.source === "manual" &&
     entry.entryType === "charge" &&
     entry.phase === "check_in" &&
-    entry.systemKey !== "extra_mileage"
+    entry.systemKey !== "extra_mileage" &&
+    !isDiscountEntry(entry)
   ) {
     return "post";
   }
@@ -170,6 +192,7 @@ export function resolveEntryPhase(entry: BillEntry): BillEntryPhase {
   if (entry.systemKey === "extra_mileage" || /extra\s*mileage|excess\s*km/i.test(entry.title ?? "")) {
     return "check_out";
   }
+  if (isDiscountEntry(entry)) return "check_out";
   if (entry.systemKey === "rental" || String(entry.systemKey ?? "").startsWith("service:")) {
     return "check_in";
   }
@@ -185,7 +208,7 @@ export function canHaveInvoice(entry: BillEntry) {
   if (entry.entryType === "payment") return true;
   if (entry.entryType !== "charge") return false;
   if (entry.systemKey === "cancellation_fee" || entry.systemKey === "cancellation_refund") return true;
-  if (entry.systemKey === "extra_mileage") return false;
+  if (entry.systemKey === "extra_mileage" || isDiscountEntry(entry)) return false;
   if (resolveEntryPhase(entry) === "check_out") return false;
   return entry.source === "manual";
 }

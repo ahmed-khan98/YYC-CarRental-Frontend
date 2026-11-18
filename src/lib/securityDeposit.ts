@@ -1,9 +1,7 @@
-import { DEFAULT_PRE_AUTHORIZED_AMOUNT } from "@/config/appConfig.ts";
 import type { BillEntry, BillPaidVia, SecurityDepositStatus, SecurityDepositSummary } from "@/types/index.ts";
 import { getBillEntryTotals } from "@/lib/billing.ts";
 import { formatAppDate } from "@/lib/timeFormat.ts";
 
-export const SECURITY_DEPOSIT_AMOUNT = DEFAULT_PRE_AUTHORIZED_AMOUNT;
 export const SECURITY_DEPOSIT_HOLD_DAYS = 15;
 
 export const SECURITY_DEPOSIT_STATUS_LABELS: Record<SecurityDepositStatus, string> = {

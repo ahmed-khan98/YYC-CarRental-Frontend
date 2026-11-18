@@ -23,9 +23,12 @@ import {
   VEHICLE_TYPE_FILTER_OPTIONS,
 } from "@/lib/vehicleCategories.ts";
 import { cn } from "@/lib/utils.ts";
+import { CarPhoto } from "@/components/car-photo.tsx";
 import { carPrimaryImage, resolveMediaUrl } from "@/lib/mediaUrl.ts";
 import { todayYmd } from "@/lib/bookingWindow.ts";
+import { formatCarName } from "@/lib/displayName.ts";
 import { toast } from "sonner";
+import { useUserBookingEnabled, userBookingHref } from "@/hooks/use-user-booking-enabled.ts";
 
 const CATEGORIES = VEHICLE_TYPE_FILTER_OPTIONS;
 const TRANSMISSIONS = ["all", "automatic", "manual"] as const;
@@ -124,7 +127,7 @@ const CarListingCard = memo(function CarListingCard({
 }: {
   car: FleetCar;
   onOpen: (carId: string) => void;
-  onBook: (carId: string) => void;
+  onBook: (car: FleetCar) => void;
 }) {
   const imgSrc = carPrimaryImage(car, CAR_IMAGES[car.category] ?? CAR_IMAGES.sedan);
 
@@ -134,18 +137,13 @@ const CarListingCard = memo(function CarListingCard({
         className="group cursor-pointer overflow-hidden border-border/50 bg-card/60 transition-all duration-300 hover:border-primary/40"
         onClick={() => onOpen(car._id)}
       >
-        <div className="relative h-48 overflow-hidden">
-          <img
-            src={resolveMediaUrl(imgSrc)}
-            alt={`${car.make} ${car.model}`}
-            className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
-          />
+        <CarPhoto src={resolveMediaUrl(imgSrc)} alt={`${car.make} ${car.model}`} className="aspect-[16/9]">
           <div className="absolute top-3 left-3">
             <Badge className={`text-xs capitalize ${vehicleCategoryBadgeClass(car.category)}`}>
               {car.category}
             </Badge>
           </div>
-        </div>
+        </CarPhoto>
         <CardContent className="p-4">
           <div className="mb-2 flex items-start justify-between">
             <div>
@@ -166,20 +164,11 @@ const CarListingCard = memo(function CarListingCard({
               </span>
             )}
           </div>
-          {car.features && car.features.length > 0 && (
-            <div className="mb-3 flex flex-wrap gap-1">
-              {car.features.slice(0, 3).map((f) => (
-                <span key={f} className="rounded-full bg-secondary px-2 py-0.5 text-[10px] text-secondary-foreground">
-                  {f}
-                </span>
-              ))}
-            </div>
-          )}
           <Button
             className="h-9 w-full cursor-pointer text-sm"
             onClick={(e) => {
               e.stopPropagation();
-              onBook(car._id);
+              onBook(car);
             }}
           >
             Book Now
@@ -193,6 +182,7 @@ const CarListingCard = memo(function CarListingCard({
 export default function CarsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
+  const { allowed: userBookingEnabled } = useUserBookingEnabled();
 
   const [category, setCategory] = useState(() => normalizeVehicleTypeFilter(searchParams.get("category")));
   const [transmission, setTransmission] = useState("all");
@@ -204,8 +194,10 @@ export default function CarsPage() {
   // Date-based availability — only filter when dates are explicitly chosen
   const [pickupDate, setPickupDate] = useState(searchParams.get("pickupDate") ?? "");
   const [dropoffDate, setDropoffDate] = useState(searchParams.get("dropoffDate") ?? "");
-  const [pickupTime] = useState(searchParams.get("pickupTime") ?? "10:00");
-  const [dropoffTime] = useState(searchParams.get("dropoffTime") ?? "10:00");
+  const selectedPickupTime = searchParams.get("pickupTime") ?? "";
+  const selectedDropoffTime = searchParams.get("dropoffTime") ?? "";
+  const pickupTime = selectedPickupTime || "10:00";
+  const dropoffTime = selectedDropoffTime || "10:00";
 
   const hasDateFilter = Boolean(pickupDate && dropoffDate);
 
@@ -287,19 +279,30 @@ export default function CarsPage() {
   const hasPanelFilters = transmission !== "all" || fuelType !== "all" || maxPrice[0] < 500;
   const hasFilters = hasPanelFilters || category !== "all" || sortBy !== "default";
 
-  const handleBookNow = useCallback((carId: string) => {
+  const handleBookNow = useCallback((car: FleetCar) => {
     const params = new URLSearchParams();
+    const pickupLocation = searchParams.get("pickupLocation");
+    const dropoffLocation = searchParams.get("dropoffLocation");
+    if (pickupLocation) params.set("pickupLocation", pickupLocation);
+    if (dropoffLocation) params.set("dropoffLocation", dropoffLocation);
     if (pickupDate) params.set("pickupDate", pickupDate);
-    if (pickupTime) params.set("pickupTime", pickupTime);
+    if (selectedPickupTime) params.set("pickupTime", selectedPickupTime);
     if (dropoffDate) params.set("dropoffDate", dropoffDate);
-    if (dropoffTime) params.set("dropoffTime", dropoffTime);
-    const qs = params.toString();
-    navigate(qs ? `/book/${carId}?${qs}` : `/book/${carId}`);
-  }, [dropoffDate, dropoffTime, navigate, pickupDate, pickupTime]);
+    if (selectedDropoffTime) params.set("dropoffTime", selectedDropoffTime);
+    params.set("carName", formatCarName(car));
+    params.set("carId", car._id);
+    navigate(userBookingHref(userBookingEnabled, car._id, params.toString()));
+  }, [dropoffDate, navigate, pickupDate, searchParams, selectedDropoffTime, selectedPickupTime, userBookingEnabled]);
 
   const handleOpenCar = useCallback((carId: string) => {
-    navigate(`/cars/${carId}`);
-  }, [navigate]);
+    const params = new URLSearchParams();
+    if (pickupDate) params.set("pickupDate", pickupDate);
+    if (selectedPickupTime) params.set("pickupTime", selectedPickupTime);
+    if (dropoffDate) params.set("dropoffDate", dropoffDate);
+    if (selectedDropoffTime) params.set("dropoffTime", selectedDropoffTime);
+    const query = params.toString();
+    navigate(query ? `/cars/${carId}?${query}` : `/cars/${carId}`);
+  }, [dropoffDate, navigate, pickupDate, selectedDropoffTime, selectedPickupTime]);
 
   const isLoading = carsLoading;
 

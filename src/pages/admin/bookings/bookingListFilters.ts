@@ -72,7 +72,9 @@ export function filterAndSortAdminBookings(
     .sort((a, b) => {
       let cmp = 0;
       if (sortField === "pickupDate") {
-        cmp = String(a.pickupDate ?? "").localeCompare(String(b.pickupDate ?? ""));
+        cmp =
+          String(a.pickupDate ?? "").localeCompare(String(b.pickupDate ?? "")) ||
+          String(a.pickupTime ?? "").localeCompare(String(b.pickupTime ?? ""));
       } else if (sortField === "status") {
         cmp = (STATUS_ORDER[a.status] ?? 99) - (STATUS_ORDER[b.status] ?? 99);
       } else {

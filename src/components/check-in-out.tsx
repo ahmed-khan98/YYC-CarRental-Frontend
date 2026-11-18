@@ -14,7 +14,7 @@ import { isUnlimitedMileageService } from "@/lib/unlimitedMileage.ts";
 import { calculateRentalDays, formatMoney, isBeforePickup } from "@/lib/rentalPricing.ts";
 import { formatBookingDate, formatDateAtTime } from "@/lib/timeFormat.ts";
 import { resolvePreAuthorizedAmount } from "@/config/appConfig.ts";
-import { computeBillSummary, getBillEntryTotals, projectCheckoutBalance } from "@/lib/billing.ts";
+import { computeBillSummary, DISCOUNT_TEXT_CLASS, getBillEntryTotals, projectCheckoutBalance } from "@/lib/billing.ts";
 import {
   FUEL_LABELS,
   FUEL_LEVELS,
@@ -952,6 +952,7 @@ function CheckOutDialog({
   carMediaFilesRef.current = carMediaFiles;
   const [paymentAmount, setPaymentAmount] = useState("");
   const [paymentDescription, setPaymentDescription] = useState("");
+  const [discountAmount, setDiscountAmount] = useState("0");
   const [chargeDrafts, setChargeDrafts] = useState<CheckoutChargeDraft[]>([]);
   const [showChargeForm, setShowChargeForm] = useState(false);
   const chargeFormRef = useRef<HTMLDivElement>(null);
@@ -983,14 +984,16 @@ function CheckOutDialog({
     });
   }, [checkInMileage, chargePerExtraKm, dailyMileageLimit, mileage, rentalDays]);
 
+  const parsedDiscount = Number(discountAmount);
   const checkoutBalance = useMemo(
     () =>
       projectCheckoutBalance(
         detail?.billEntries ?? [],
         mileagePreview?.extraMileageCharge ?? 0,
         chargeDrafts,
+        Number.isFinite(parsedDiscount) && parsedDiscount > 0 ? parsedDiscount : 0,
       ),
-    [chargeDrafts, detail?.billEntries, mileagePreview?.extraMileageCharge],
+    [chargeDrafts, detail?.billEntries, mileagePreview?.extraMileageCharge, parsedDiscount],
   );
 
   useEffect(() => {
@@ -1003,6 +1006,7 @@ function CheckOutDialog({
       paymentAmountDirtyRef.current = false;
       setPaymentAmount("");
       setPaymentDescription("");
+      setDiscountAmount("0");
       setChargeDrafts([]);
       setShowChargeForm(false);
       setChargeTitle("");
@@ -1107,6 +1111,15 @@ function CheckOutDialog({
       toast.error("Enter a valid amount paid");
       return;
     }
+    const discount = Number(discountAmount);
+    if (discountAmount && (!Number.isFinite(discount) || discount < 0)) {
+      toast.error("Enter a valid discount");
+      return;
+    }
+    if (Number.isFinite(discount) && discount > checkoutBalance.totalUnpaidBeforeDiscount) {
+      toast.error(`Discount cannot exceed ${formatMoney(checkoutBalance.totalUnpaidBeforeDiscount)}`);
+      return;
+    }
     if (Number.isFinite(paid) && checkoutBalance.totalUnpaid > 0 && paid > checkoutBalance.totalUnpaid) {
       toast.error(`Amount paid cannot exceed ${formatMoney(checkoutBalance.totalUnpaid)}`);
       return;
@@ -1151,6 +1164,7 @@ function CheckOutDialog({
               description,
             }))
           : undefined,
+        discountAmount: Number.isFinite(discount) && discount > 0 ? discount : undefined,
         paymentEntry: paymentAmount
           ? {
               amount: Number(paymentAmount),
@@ -1163,7 +1177,7 @@ function CheckOutDialog({
       await updateBooking.mutateAsync({ bookingId: booking._id, status: "checked_out" });
       await invalidateAfterInspectionChange(queryClient, booking._id, booking.carId);
       onClose();
-      if (result.mileageBilling?.extraMileageCharge || checkoutCharges.length > 0) {
+      if (result.mileageBilling?.extraMileageCharge || checkoutCharges.length > 0 || (Number.isFinite(discount) && discount > 0)) {
         const extras = [
           result.mileageBilling?.extraMileageCharge
             ? `extra mileage $${result.mileageBilling.extraMileageCharge.toFixed(2)}`
@@ -1171,6 +1185,7 @@ function CheckOutDialog({
           checkoutCharges.length > 0
             ? `${checkoutCharges.length} billing ${checkoutCharges.length === 1 ? "entry" : "entries"}`
             : null,
+          Number.isFinite(discount) && discount > 0 ? `discount ${formatMoney(discount)}` : null,
         ].filter(Boolean);
         toast.success(`Check-out recorded. Added ${extras.join(" and ")} to the bill.`);
       } else {
@@ -1435,6 +1450,26 @@ function CheckOutDialog({
                         </span>
                       </div>
                     ))}
+                  {(checkoutBalance.extraMileageCharge > 0 ||
+                    checkoutBalance.pendingChargeSubtotal > 0 ||
+                    checkoutBalance.discountAmount > 0) && (
+                    <div className="flex justify-between gap-3 pt-1.5 border-t border-border/40">
+                      <span className="text-muted-foreground">Subtotal</span>
+                      <span className="font-medium tabular-nums">
+                        {formatMoney(
+                          checkoutBalance.extraMileageCharge + checkoutBalance.pendingChargeSubtotal,
+                        )}
+                      </span>
+                    </div>
+                  )}
+                  {checkoutBalance.discountAmount > 0 && (
+                    <div className="flex justify-between gap-3">
+                      <span className={DISCOUNT_TEXT_CLASS}>Discount</span>
+                      <span className={`font-medium tabular-nums ${DISCOUNT_TEXT_CLASS}`}>
+                        −{formatMoney(checkoutBalance.discountAmount)}
+                      </span>
+                    </div>
+                  )}
                   {checkoutBalance.addedTax > 0 && (
                     <div className="flex justify-between gap-3">
                       <span className="text-muted-foreground">Tax (5%)</span>
@@ -1454,9 +1489,21 @@ function CheckOutDialog({
                 <p className="text-[11px] text-muted-foreground">Loading balance...</p>
               )}
               <div className="space-y-2.5">
-                <p className="text-[11px] text-muted-foreground">
-                  Record the amount collected from the customer at check-out.
-                </p>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Discount ($)</Label>
+                  <Input
+                    type="number"
+                    min="0"
+                    max={checkoutBalance.totalUnpaidBeforeDiscount || undefined}
+                    step="0.01"
+                    value={discountAmount}
+                    onChange={(e) =>
+                      setDiscountAmount(
+                        clampPaidAmount(e.target.value, checkoutBalance.totalUnpaidBeforeDiscount),
+                      )
+                    }
+                  />
+                </div>
                 <div className="space-y-1.5">
                   <Label className="text-xs">Amount paid ($)</Label>
                   <Input

@@ -23,6 +23,7 @@ import AdminCheckInOutPage from "./pages/admin/checkinout/page.tsx";
 import AdminCustomersPage from "./pages/admin/customers/page.tsx";
 import AdminLocationsPage from "./pages/admin/locations/page.tsx";
 import AdminServicesPage from "./pages/admin/services/page.tsx";
+import AdminFeaturesPage from "./pages/admin/features/page.tsx";
 import AdminMaintenancePage from "./pages/admin/maintenance/page.tsx";
 import AdminTeamPage from "./pages/admin/team/page.tsx";
 import AdminSettingsPage from "./pages/admin/settings/page.tsx";
@@ -62,6 +63,7 @@ export default function App() {
             <Route path="customers" element={<AdminCustomersPage />} />
             <Route path="locations" element={<AdminLocationsPage />} />
             <Route path="services" element={<AdminServicesPage />} />
+            <Route path="features" element={<AdminFeaturesPage />} />
             <Route path="maintenance" element={<AdminMaintenancePage />} />
             <Route path="team" element={<AdminTeamPage />} />
             <Route path="settings" element={<Navigate to="/admin/config" replace />} />

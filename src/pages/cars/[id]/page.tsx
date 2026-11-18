@@ -11,7 +11,10 @@ import { ArrowLeft, Users, Fuel, Gauge, Cog, CheckCircle } from "lucide-react";
 import { motion } from "motion/react";
 import { cn } from "@/lib/utils.ts";
 import { vehicleCategoryBadgeClass } from "@/lib/vehicleCategories.ts";
+import { CarPhoto } from "@/components/car-photo.tsx";
 import { carImageUrls } from "@/lib/mediaUrl.ts";
+import { formatCarName } from "@/lib/displayName.ts";
+import { useUserBookingEnabled, userBookingHref } from "@/hooks/use-user-booking-enabled.ts";
 
 const CAR_IMAGES: Record<string, string> = {
   // economy: "https://images.unsplash.com/photo-1690278289651-895463644114?w=800&q=80",
@@ -27,6 +30,7 @@ export default function CarDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const { allowed: userBookingEnabled } = useUserBookingEnabled();
   const [activeImage, setActiveImage] = useState(0);
 
   useEffect(() => {
@@ -90,19 +94,18 @@ export default function CarDetailPage() {
                 animate={{ opacity: 1, y: 0 }}
                 className="space-y-3"
               >
-                <div className="relative overflow-hidden rounded-2xl border border-border/40 bg-muted/30">
-                  <img
-                    src={images[safeActiveImage]}
-                    alt={`${car.make} ${car.model}`}
-                    className="h-56 w-full object-cover sm:h-72"
-                  />
+                <CarPhoto
+                  src={images[safeActiveImage]}
+                  alt={`${car.make} ${car.model}`}
+                  className="aspect-[16/9] rounded-2xl border border-border/40"
+                >
                   <div className="absolute top-4 left-4 flex gap-2">
                     <Badge className={cn("capitalize", vehicleCategoryBadgeClass(car.category))}>
                       {car.category}
                     </Badge>
                     {!car.isAvailable && <Badge className="bg-destructive text-destructive-foreground">Unavailable</Badge>}
                   </div>
-                </div>
+                </CarPhoto>
                 {images.length > 1 && (
                   <div className="-mx-4 flex gap-2 overflow-x-auto overscroll-x-contain touch-pan-x px-4 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden sm:mx-0 sm:px-0">
                     {images.map((url, i) => (
@@ -206,8 +209,10 @@ export default function CarDetailPage() {
                     size="lg"
                     disabled={!car.isAvailable}
                     onClick={() => {
-                      const qs = searchParams.toString();
-                      navigate(qs ? `/book/${car._id}?${qs}` : `/book/${car._id}`);
+                      const params = new URLSearchParams(searchParams);
+                      params.set("carName", formatCarName(car));
+                      params.set("carId", car._id);
+                      navigate(userBookingHref(userBookingEnabled, car._id, params.toString()));
                     }}
                   >
                     {car.isAvailable ? "Book This Car" : "Not Available"}

@@ -23,6 +23,8 @@ import { addDaysYmd, todayYmd } from "@/lib/bookingWindow.ts";
 import { carsApi } from "@/api/cars.api.ts";
 import { getApiErrorMessage } from "@/api/client.ts";
 import { toast } from "sonner";
+import { CarPhoto } from "@/components/car-photo.tsx";
+import { statsApi, type PublicStats } from "@/api/stats.api.ts";
 
 // Real MP4 hosted in /public — do not hotlink Pexels CDN (403) or use their JPEG "download" URLs
 const HERO_VIDEO = "/hero-video.mp4?v=3";
@@ -52,6 +54,7 @@ const heroSearchRowTopClass =
 const heroSearchRowBottomClass = "grid grid-cols-2 items-end gap-3 sm:grid-cols-5";
 const heroSearchButtonClass =
   "col-span-2 h-10 cursor-pointer rounded-lg text-sm font-bold sm:col-span-1";
+
 const FEATURED_CARS = [
   {
     name: "BMW 3 Series",
@@ -82,12 +85,32 @@ const FEATURED_CARS = [
   },
 ];
 
-const STATS = [
-  { icon: Car, value: "200+", label: "Cars Available" },
-  { icon: Users, value: "50K+", label: "Happy Customers" },
-  { icon: Award, value: "4.9★", label: "Average Rating" },
-  { icon: MapPin, value: "12", label: "Pickup Locations" },
+type CountStatKey = "cars" | "customers" | "locations";
+
+type StatCard = {
+  icon: typeof Car;
+  label: string;
+  key?: CountStatKey;
+  plus?: boolean;
+  isRating?: boolean;
+};
+
+const STAT_CARDS: StatCard[] = [
+  { key: "cars", icon: Car, label: "Cars Available", plus: true },
+  { key: "customers", icon: Users, label: "Happy Customers", plus: true },
+  { icon: Award, label: "Average Rating", isRating: true },
+  { key: "locations", icon: MapPin, label: "Pickup Locations" },
 ];
+
+function formatStatValue(stat: StatCard, stats?: PublicStats) {
+  if (stat.isRating) {
+    if (stats?.rating != null) return `${Number(stats.rating).toFixed(1)}★`;
+    return "4.9★";
+  }
+  if (!stats || !stat.key) return "—";
+  const value = stats[stat.key];
+  return stat.plus ? `${value}+` : String(value);
+}
 
 const WHY_US = [
   {
@@ -134,19 +157,14 @@ const FeaturedCarCard = memo(function FeaturedCarCard({
     <Card className="overflow-hidden border-border/50 bg-card/60 hover:border-primary/40 transition-all duration-300 cursor-pointer group"
       onClick={onOpen}
     >
-      <div className="relative overflow-hidden h-48">
-        <img
-          src={car.image}
-          alt={car.name}
-          className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-        />
+      <CarPhoto src={car.image} alt={car.name} className="h-48">
         <div className="absolute top-3 right-3">
           <Badge className="bg-background/80 backdrop-blur text-foreground border-0 text-xs">
             <Star className="h-3 w-3 fill-primary text-primary mr-1" />
             {car.rating}
           </Badge>
         </div>
-      </div>
+      </CarPhoto>
       <CardContent className="p-4">
         <div className="flex items-start justify-between mb-2">
           <div>
@@ -178,6 +196,10 @@ export default function Index() {
   const { data: locationsResult } = useQuery({
     queryKey: ["locations", { activeOnly: true }],
     queryFn: () => locationsApi.list(true),
+  });
+  const { data: publicStats } = useQuery({
+    queryKey: ["stats", "public"],
+    queryFn: statsApi.getPublic,
   });
   const locations = listItems(locationsResult);
 
@@ -437,20 +459,6 @@ export default function Index() {
                 </Button>
               </div>
             </motion.div>
-
-            <motion.div
-              className="mt-4 flex items-center gap-4 text-sm text-white/70"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.8 }}
-            >
-              <div className="flex items-center gap-1">
-                <Star className="h-3 w-3 fill-primary text-primary" />
-                <span>4.9/5 from 12,000+ reviews</span>
-              </div>
-              <span>•</span>
-              <span>Flexible cancellation policy</span>
-            </motion.div>
           </motion.div>
         </div>
       </section>
@@ -464,23 +472,42 @@ export default function Index() {
           transition={{ duration: 0.6 }}
           className="grid grid-cols-2 md:grid-cols-4 gap-4"
         >
-          {STATS.map((stat, i) => (
-            <motion.div
-              key={stat.label}
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ delay: i * 0.1, duration: 0.4 }}
-            >
-              <Card className="bg-card backdrop-blur border-border shadow-sm text-center p-5">
+          {STAT_CARDS.map((stat, i) => {
+            const reviewsHref = stat.isRating ? publicStats?.reviewsUrl : null;
+            const card = (
+              <Card className="bg-card backdrop-blur border-border shadow-sm text-center p-5 h-full">
                 <CardContent className="p-0 space-y-1">
                   <stat.icon className="h-5 w-5 text-primary mx-auto mb-2" />
-                  <div className="text-2xl font-bold text-foreground">{stat.value}</div>
+                  <div className="text-2xl font-bold text-foreground">
+                    {formatStatValue(stat, publicStats)}
+                  </div>
                   <div className="text-xs text-muted-foreground">{stat.label}</div>
                 </CardContent>
               </Card>
-            </motion.div>
-          ))}
+            );
+            return (
+              <motion.div
+                key={stat.label}
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ delay: i * 0.1, duration: 0.4 }}
+              >
+                {reviewsHref ? (
+                  <a
+                    href={reviewsHref}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="block h-full"
+                  >
+                    {card}
+                  </a>
+                ) : (
+                  card
+                )}
+              </motion.div>
+            );
+          })}
         </motion.div>
       </section>
 
@@ -520,7 +547,7 @@ export default function Index() {
         </div>
       </section>
 
-      {/* Why Us */}
+      {/* Why Us
       <section className="bg-card/30 border-y border-border/50 py-20 mb-0">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <motion.div
@@ -554,6 +581,7 @@ export default function Index() {
           </div>
         </div>
       </section>
+      */}
 
       {/* Transparent Pricing */}
       <section className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-20">
@@ -629,7 +657,7 @@ export default function Index() {
               Ready to hit the road?
             </h2>
             <p className="mb-8 text-lg text-white/80">
-              Browse 200+ cars and book your perfect ride in minutes.
+              Browse {publicStats?.cars ?? 0} cars and book your perfect ride in minutes.
             </p>
             <Link to="/cars">
               <Button
