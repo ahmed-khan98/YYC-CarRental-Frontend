@@ -53,17 +53,16 @@ export function contactBookingInquiryLines(
     ? formatDateAtTime(formatBookingDate(inquiry.dropoffDate), inquiry.dropoffTime || undefined)
     : "";
 
-  const fields: ContactInquiryLine[] = [
-    inquiry.carName ? { type: "field", label: "Car", value: inquiry.carName } : null,
-    pickupWhen ? { type: "field", label: "Pickup date", value: pickupWhen } : null,
-    nameOf(inquiry.pickupLocationId)
-      ? { type: "field", label: "Pickup location", value: nameOf(inquiry.pickupLocationId) }
-      : null,
-    dropoffWhen ? { type: "field", label: "Drop-off date", value: dropoffWhen } : null,
-    nameOf(inquiry.dropoffLocationId)
-      ? { type: "field", label: "Drop-off location", value: nameOf(inquiry.dropoffLocationId) }
-      : null,
-  ].filter((line): line is ContactInquiryLine => line != null);
+  const fields: ContactInquiryLine[] = [];
+  if (inquiry.carName) fields.push({ type: "field", label: "Car", value: inquiry.carName });
+  if (pickupWhen) fields.push({ type: "field", label: "Pickup date", value: pickupWhen });
+  if (nameOf(inquiry.pickupLocationId)) {
+    fields.push({ type: "field", label: "Pickup location", value: nameOf(inquiry.pickupLocationId) });
+  }
+  if (dropoffWhen) fields.push({ type: "field", label: "Drop-off date", value: dropoffWhen });
+  if (nameOf(inquiry.dropoffLocationId)) {
+    fields.push({ type: "field", label: "Drop-off location", value: nameOf(inquiry.dropoffLocationId) });
+  }
 
   if (fields.length === 0) return [];
   return [

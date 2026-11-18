@@ -162,7 +162,7 @@ export function projectCheckoutBalance(
     pendingChargeTax: Math.round((projectedNoDiscount.taxAmount - withMileage.taxAmount) * 100) / 100,
     pendingChargeTotal: Math.round((projectedNoDiscount.totalBill - withMileage.totalBill) * 100) / 100,
     addedTax: Math.round((projected.taxAmount - current.taxAmount) * 100) / 100,
-    discountAmount: projected.discountAmount,
+    discountAmount: projected.discountAmount ?? 0,
     totalUnpaidBeforeDiscount: maxDiscount,
     totalUnpaid: projected.totalUnpaid,
   };
